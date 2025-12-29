@@ -1,0 +1,2 @@
+/usr/bin/ar qc libdbwaller.a CMakeFiles/dbwaller.dir/src/concurrency/thread_pool.cpp.o
+/usr/bin/ranlib libdbwaller.a

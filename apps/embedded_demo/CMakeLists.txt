@@ -1,0 +1,2 @@
+add_executable(dbwaller_embedded_demo main.cpp)
+target_link_libraries(dbwaller_embedded_demo PRIVATE dbwaller)
