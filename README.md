@@ -32,10 +32,22 @@ Most modern apps eventually depend on external cache infrastructure (Redis/Memca
 - `tests/` and `benchmarks/` — correctness + performance suites (planned)
 - `docs/` — architecture, evaluation plan, threat model
 
-## Build (Skeleton)
+## Build And Test
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DDBWALLER_BUILD_TESTS=OFF -DDBWALLER_BUILD_BENCHMARKS=OFF
-cmake --build build -j
-./build/apps/embedded_demo/dbwaller_embedded_demo
+conan install . -of build -s build_type=Release \
+  -o '&:with_tests=True' -o '&:with_benchmarks=False' --build=missing
+cmake --preset conan-release -DDBWALLER_BUILD_TESTS=ON -DDBWALLER_BUILD_BENCHMARKS=OFF
+cmake --build --preset conan-release
+ctest --preset conan-release --output-on-failure
+```
+
+To build only the demo binary:
+
+```bash
+conan install . -of build -s build_type=Release \
+  -o '&:with_tests=False' -o '&:with_benchmarks=False' --build=missing
+cmake --preset conan-release -DDBWALLER_BUILD_TESTS=OFF -DDBWALLER_BUILD_BENCHMARKS=OFF
+cmake --build --preset conan-release
+./build/build/Release/apps/embedded_demo/dbwaller_embedded_demo
+```

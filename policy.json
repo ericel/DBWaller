@@ -1,0 +1,27 @@
+{
+  "default": {
+    "scope": "PerViewer",
+    "ttl_ms": 1500,
+    "min_ttl_ms": 50,
+    "max_ttl_ms": 30000,
+    "vary_by_claims": false,
+    "require_claims_fingerprint": false
+  },
+  "denylist": ["session", "payments", "secrets"],
+  "presets": {
+    "post": {
+      "scope": "Public",
+      "ttl_ms": 5000
+    },
+    "timeline": {
+      "scope": "PerViewer",
+      "ttl_ms": 500
+    },
+    "adminview": {
+      "scope": "PerViewer",
+      "ttl_ms": 800,
+      "vary_by_claims": true,
+      "require_claims_fingerprint": true
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "DBWALLER_BUILD_TESTS": "OFF",
+        "DBWALLER_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "release-tests",
+      "inherits": "release",
+      "cacheVariables": {
+        "DBWALLER_BUILD_TESTS": "ON",
+        "DBWALLER_BUILD_BENCHMARKS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build-release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "build-release-tests",
+      "configurePreset": "release-tests"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "tier-a-pr",
+      "configurePreset": "release-tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "unit|functional"
+        }
+      }
+    },
+    {
+      "name": "tier-b-main",
+      "configurePreset": "release-tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "unit|functional|regression|system"
+        }
+      }
+    },
+    {
+      "name": "tier-c-nightly",
+      "configurePreset": "release-tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "system|slow|nightly"
+        }
+      }
+    }
+  ]
+}

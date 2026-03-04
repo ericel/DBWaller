@@ -1,0 +1,7 @@
+.DS_Store
+
+/build/
+/CMakeCache.txt
+/CMakeUserPresets.json
+/compile_commands.json
+/Testing/

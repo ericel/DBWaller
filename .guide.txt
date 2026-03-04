@@ -1,3 +1,52 @@
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/apps/embedded_demo/dbwaller_embedded_demo
+
+
+conan install . --settings build_type=Debug  --build=missing -c tools.cmake.cmaketoolchain:generator=Ninja && \
+cmake -B build -DCMAKE_TOOLCHAIN_FILE=Debug/Generators/conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Debug -G Ninja && \
+cmake --build build
+
+OR 
+cmake --preset conan-debug
+
+
+conan install . \
+  --output-folder=build \
+  -s build_type=Release \
+  -o with_benchmarks=True \
+  -o "benchmark/*:enable_testing=False" \
+  -o "benchmark/*:enable_assembly_tests=False" \
+  -c "tools.cmake.cmaketoolchain:extra_variables={'GIT_EXECUTABLE': 'FALSE'}" \
+  -c "tools.cmake.cmaketoolchain:generator=Ninja" \
+  --build=missing
+
+
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DDBWALLER_BUILD_BENCHMARKS=ON \
+  -DCMAKE_TOOLCHAIN_FILE=build/build/Release/generators/conan_toolchain.cmake
+
+cmake --build build
+or 
+cmake --build build -j
+
+
+// For benchmark
+cmake -S . -B build-bench -DDBWALLER_BUILD_BENCHMARKS=ON -DDBWALLER_BUILD_APPS=OFF
+cmake --build build-bench -j
+./build-bench/benchmarks/dbwaller_bench_throughput --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+
+
+// For tests
+cmake -S . -B build-tests \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DDBWALLER_BUILD_TESTS=ON \
+  -DCMAKE_TOOLCHAIN_FILE=build/build/Debug/generators/conan_toolchain.cmake
+
+// then 
+cmake --build build-tests -j
+// finally
+ctest --test-dir build-tests
+
+

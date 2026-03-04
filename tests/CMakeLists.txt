@@ -1,4 +1,6 @@
-# Placeholder - tests will be added later
-add_custom_target(dbwaller_tests_placeholder ALL
-  COMMENT "DBWaller: tests not added yet"
-)
+# tests/CMakeLists.txt
+add_subdirectory(unit)
+add_subdirectory(functional)
+add_subdirectory(regression)
+add_subdirectory(system)
+add_subdirectory(integration)
