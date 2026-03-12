@@ -5,3 +5,6 @@
 /CMakeUserPresets.json
 /compile_commands.json
 /Testing/
+/test_package/build/
+/test_package/CMakeUserPresets.json
+__pycache__/
