@@ -27,10 +27,11 @@ This document defines the tracked path for continuous integration, versioning, a
 - `.github/workflows/release.yml`
   - Runs on `v*.*.*` tags.
   - Verifies the pushed tag matches `VERSION`.
-  - Runs Tier B validation with tests enabled.
-  - Creates the Conan package.
+  - Runs Tier B validation with tests enabled before any release approval is requested.
+  - Waits on the `release` GitHub environment before publishing.
+  - Re-creates the Conan package in the gated publish job.
   - Optionally uploads to Artifactory when the Artifactory variables and secrets are present.
-  - Creates a GitHub release after validation passes.
+  - Creates a GitHub release after the gated publish job completes.
 - `.github/workflows/nightly.yml`
   - Runs on a schedule and by manual dispatch.
   - Executes Tier C system-oriented validation.
@@ -40,9 +41,10 @@ This document defines the tracked path for continuous integration, versioning, a
 
 - Protect `main`.
 - Require pull requests before merge.
-- Require the `ci / verify` status check before merge.
+- Require the `verify` status check before merge.
 - Block force pushes to `main`.
-- Restrict who can push tags if you want release creation limited to maintainers.
+- Add a `release` environment with required reviewer `ericel` and `prevent_self_review=false`.
+- Add a tag ruleset for `v*` that blocks tag updates and deletions.
 
 ## Optional Artifactory Upload Configuration
 
@@ -54,6 +56,13 @@ Only set these if you want `release.yml` to publish built packages to Artifactor
 - Repository secrets:
   - `ARTIFACTORY_USERNAME`
   - `ARTIFACTORY_PASSWORD`
+
+## Release Environment Gate
+
+- The `publish` job in `.github/workflows/release.yml` uses the `release` environment.
+- Validation completes before GitHub asks for approval.
+- `ericel` is configured as the required reviewer.
+- Self-review is allowed so the gate stays usable in a solo-maintainer repository.
 
 ## Local Maintainer Flow
 
@@ -73,7 +82,8 @@ To cut a release:
 1. Update `CHANGELOG.md`.
 2. Commit any release-ready changes with the desired `VERSION`.
 3. Push the release tag `v<version>`.
-4. Let `release.yml` validate, package, and publish.
+4. Approve the `release` environment when GitHub prompts after validation succeeds.
+5. Let `release.yml` publish the package and create the GitHub release.
 
 ## Staged Path Forward
 
