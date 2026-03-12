@@ -41,7 +41,7 @@ This document defines the tracked path for continuous integration, versioning, a
 
 - Protect `main`.
 - Require pull requests before merge.
-- Require the `ci / verify` status check before merge.
+- Require the `verify` status check before merge.
 - Block force pushes to `main`.
 - Add a `release` environment with required reviewer `ericel` and `prevent_self_review=false`.
 - Add a tag ruleset for `v*` that blocks tag updates and deletions.
