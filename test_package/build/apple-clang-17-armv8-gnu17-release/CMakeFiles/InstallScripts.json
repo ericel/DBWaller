@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Applications/dev/cplusplus/DBWaller/test_package/build/apple-clang-17-armv8-gnu17-release/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -7,6 +7,7 @@
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "DBWALLER_BUILD_APPS": "ON",
         "DBWALLER_BUILD_TESTS": "OFF",
         "DBWALLER_BUILD_BENCHMARKS": "OFF"
       }
@@ -14,6 +15,26 @@
     {
       "name": "release-tests",
       "inherits": "release",
+      "cacheVariables": {
+        "DBWALLER_BUILD_TESTS": "ON",
+        "DBWALLER_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "conan-release",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/build/Release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/build/build/Release/generators/conan_toolchain.cmake",
+        "DBWALLER_BUILD_APPS": "OFF",
+        "DBWALLER_BUILD_TESTS": "OFF",
+        "DBWALLER_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "conan-release-tests",
+      "inherits": "conan-release",
       "cacheVariables": {
         "DBWALLER_BUILD_TESTS": "ON",
         "DBWALLER_BUILD_BENCHMARKS": "OFF"
@@ -28,12 +49,20 @@
     {
       "name": "build-release-tests",
       "configurePreset": "release-tests"
+    },
+    {
+      "name": "build-conan-release",
+      "configurePreset": "conan-release"
+    },
+    {
+      "name": "build-conan-release-tests",
+      "configurePreset": "conan-release-tests"
     }
   ],
   "testPresets": [
     {
       "name": "tier-a-pr",
-      "configurePreset": "release-tests",
+      "configurePreset": "conan-release-tests",
       "output": {
         "outputOnFailure": true
       },
@@ -45,7 +74,7 @@
     },
     {
       "name": "tier-b-main",
-      "configurePreset": "release-tests",
+      "configurePreset": "conan-release-tests",
       "output": {
         "outputOnFailure": true
       },
@@ -57,7 +86,7 @@
     },
     {
       "name": "tier-c-nightly",
-      "configurePreset": "release-tests",
+      "configurePreset": "conan-release-tests",
       "output": {
         "outputOnFailure": true
       },

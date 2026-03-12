@@ -26,28 +26,57 @@ Most modern apps eventually depend on external cache infrastructure (Redis/Memca
 
 - `include/dbwaller/` — public headers (core, concurrency, policy, crypto, adapters)
 - `src/` — implementations
+- `cmake/` — package configuration templates
 - `apps/embedded_demo` — minimal embedded example
 - `apps/dbwaller_daemon` — standalone service (planned)
 - `apps/benchmark_harness` — load + latency evaluation harness (planned)
-- `tests/` and `benchmarks/` — correctness + performance suites (planned)
-- `docs/` — architecture, evaluation plan, threat model
+- `tests/` and `benchmarks/` — correctness + performance suites
+- `test_package/` — Conan consumer verification
+- `docs/` — architecture, testing, CI, and release controls
 
 ## Build And Test
 
+DBWaller uses Conan to provision third-party dependencies for local development and CI.
+
 ```bash
-conan install . -of build -s build_type=Release \
-  -o '&:with_tests=True' -o '&:with_benchmarks=False' --build=missing
-cmake --preset conan-release -DDBWALLER_BUILD_TESTS=ON -DDBWALLER_BUILD_BENCHMARKS=OFF
-cmake --build --preset conan-release
-ctest --preset conan-release --output-on-failure
+conan profile detect --force
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=20 \
+  -o '&:with_tests=True' -o '&:with_benchmarks=False' -o '&:build_apps=False'
+cmake --preset conan-release-tests
+cmake --build --preset build-conan-release-tests
+ctest --preset tier-a-pr
 ```
 
-To build only the demo binary:
+To build the demo binary without tests:
 
 ```bash
-conan install . -of build -s build_type=Release \
-  -o '&:with_tests=False' -o '&:with_benchmarks=False' --build=missing
-cmake --preset conan-release -DDBWALLER_BUILD_TESTS=OFF -DDBWALLER_BUILD_BENCHMARKS=OFF
-cmake --build --preset conan-release
+conan profile detect --force
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=20 \
+  -o '&:with_tests=False' -o '&:with_benchmarks=False' -o '&:build_apps=True'
+cmake --preset conan-release
+cmake --build --preset build-conan-release
 ./build/build/Release/apps/embedded_demo/dbwaller_embedded_demo
 ```
+
+## Create A Conan Package
+
+```bash
+conan create . --build=missing -s build_type=Release -s compiler.cppstd=20 \
+  -o '&:with_tests=False' -o '&:with_benchmarks=False' -o '&:build_apps=False'
+```
+
+This produces a static library package and runs `test_package/` to verify downstream consumption via `find_package(DBWaller CONFIG REQUIRED)`.
+
+## Consume From CMake
+
+```cmake
+find_package(DBWaller CONFIG REQUIRED)
+target_link_libraries(your_target PRIVATE DBWaller::dbwaller)
+```
+
+## Versioning And Release Control
+
+- `VERSION` is the single source of truth for the project version.
+- Release tags must match `v<version>`, for example `v0.1.0`.
+- User-visible and package-facing changes belong in `CHANGELOG.md`.
+- GitHub workflow and branch-protection guidance lives in `docs/ci-release-roadmap.md`.

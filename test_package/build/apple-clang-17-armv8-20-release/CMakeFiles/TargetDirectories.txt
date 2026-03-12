@@ -1,0 +1,3 @@
+/Applications/dev/cplusplus/DBWaller/test_package/build/apple-clang-17-armv8-20-release/CMakeFiles/dbwaller_test_package.dir
+/Applications/dev/cplusplus/DBWaller/test_package/build/apple-clang-17-armv8-20-release/CMakeFiles/edit_cache.dir
+/Applications/dev/cplusplus/DBWaller/test_package/build/apple-clang-17-armv8-20-release/CMakeFiles/rebuild_cache.dir

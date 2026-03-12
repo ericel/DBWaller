@@ -204,12 +204,19 @@ Preserve existing `integration/` while migrating tests by intent.
 Use this baseline flow from the repository root:
 
 ```bash
-conan install . -of build -s build_type=Release \
-  -o '&:with_tests=True' -o '&:with_benchmarks=False' --build=missing
-cmake --preset conan-release -DDBWALLER_BUILD_TESTS=ON -DDBWALLER_BUILD_BENCHMARKS=OFF
-cmake --build --preset conan-release
-ctest --preset conan-release --output-on-failure
+conan profile detect --force
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=20 \
+  -o '&:with_tests=True' -o '&:with_benchmarks=False' -o '&:build_apps=False'
+cmake --preset conan-release-tests
+cmake --build --preset build-conan-release-tests
+ctest --preset tier-a-pr
 ```
+
+These tiers are mapped into GitHub Actions as:
+
+- `ci.yml` -> Tier A
+- `release.yml` -> Tier B
+- `nightly.yml` -> Tier C
 
 ## Recommended labels
 
