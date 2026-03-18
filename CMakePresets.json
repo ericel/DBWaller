@@ -21,6 +21,14 @@
       }
     },
     {
+      "name": "release-benchmarks",
+      "inherits": "release",
+      "cacheVariables": {
+        "DBWALLER_BUILD_TESTS": "OFF",
+        "DBWALLER_BUILD_BENCHMARKS": "ON"
+      }
+    },
+    {
       "name": "conan-release",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build/build/Release",
@@ -38,6 +46,14 @@
       "cacheVariables": {
         "DBWALLER_BUILD_TESTS": "ON",
         "DBWALLER_BUILD_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "conan-release-benchmarks",
+      "inherits": "conan-release",
+      "cacheVariables": {
+        "DBWALLER_BUILD_TESTS": "OFF",
+        "DBWALLER_BUILD_BENCHMARKS": "ON"
       }
     }
   ],
@@ -57,6 +73,14 @@
     {
       "name": "build-conan-release-tests",
       "configurePreset": "conan-release-tests"
+    },
+    {
+      "name": "build-release-benchmarks",
+      "configurePreset": "release-benchmarks"
+    },
+    {
+      "name": "build-conan-release-benchmarks",
+      "configurePreset": "conan-release-benchmarks"
     }
   ],
   "testPresets": [

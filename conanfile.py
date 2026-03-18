@@ -74,7 +74,7 @@ class DBWallerConan(ConanFile):
             self.requires("catch2/3.7.1")
 
         if self.options.with_benchmarks:
-            self.requires("benchmark/1.8.3")
+            self.requires("benchmark/1.9.1")
 
     def package_id(self):
         self.info.options.rm_safe("with_tests")

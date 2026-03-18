@@ -7,8 +7,17 @@ add_executable(dbwaller_bench_throughput
   throughput_bench.cpp
 )
 
+add_executable(dbwaller_bench_baseline
+  baseline_bench.cpp
+)
+
 target_link_libraries(dbwaller_bench_throughput PRIVATE
   dbwaller
+  benchmark::benchmark
+  benchmark::benchmark_main
+)
+
+target_link_libraries(dbwaller_bench_baseline PRIVATE
   benchmark::benchmark
   benchmark::benchmark_main
 )
