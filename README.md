@@ -58,6 +58,51 @@ cmake --build --preset build-conan-release
 ./build/build/Release/apps/embedded_demo/dbwaller_embedded_demo
 ```
 
+## Benchmark Automation
+
+Build dependencies and benchmark targets, then run:
+
+```bash
+conan profile detect --force
+conan install . --output-folder=build --build=missing -s build_type=Release -s compiler.cppstd=20 \
+  -o '&:with_tests=False' -o '&:with_benchmarks=True' -o '&:build_apps=False' \
+  -c tools.cmake.cmaketoolchain:extra_variables="{'GIT_EXECUTABLE':'/usr/bin/git'}"
+cmake --preset conan-release-benchmarks
+cmake --build --preset build-conan-release-benchmarks
+```
+
+Then run:
+
+```bash
+scripts/run_benchmarks.sh
+```
+
+Note: the `GIT_EXECUTABLE` override avoids a known macOS environment issue where Git.app returns an empty `git describe` result during `benchmark/1.9.1` configure.
+
+Outputs are written to `results/raw/<run_id>/` with:
+
+- `baseline.json`
+- `sharded.json`
+- `metadata.txt`
+
+Aggregate to CSV:
+
+```bash
+scripts/analyze_results.py --latest
+```
+
+This writes `results/processed/<run_id>.csv`.
+
+Generate figures:
+
+```bash
+scripts/plot_results.py --latest
+```
+
+This writes PNG charts under `results/figures/<run_id>/`.
+
+See `docs/benchmark-methodology.md` for naming conventions and experiment controls.
+
 ## Create A Conan Package
 
 ```bash

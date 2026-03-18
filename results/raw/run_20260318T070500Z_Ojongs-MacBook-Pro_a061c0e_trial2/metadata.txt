@@ -1,0 +1,10 @@
+run_id=run_20260318T070500Z_Ojongs-MacBook-Pro_a061c0e_trial2
+timestamp_utc=20260318T070427Z
+hostname=Ojongs-MacBook-Pro
+git_sha=a061c0e
+uname=Darwin Ojongs-MacBook-Pro.local 25.3.0 Darwin Kernel Version 25.3.0: Wed Jan 28 20:56:35 PST 2026; root:xnu-12377.91.3~2/RELEASE_ARM64_T6030 arm64
+baseline_bin=/Applications/dev/cplusplus/DBWaller/build/build/Release/benchmarks/dbwaller_bench_baseline
+throughput_bin=/Applications/dev/cplusplus/DBWaller/build/build/Release/benchmarks/dbwaller_bench_throughput
+bench_filter=.*
+bench_min_time=0.05s
+bench_perf_counters=

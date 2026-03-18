@@ -5,46 +5,66 @@
 #include <barrier>
 #include <chrono>
 #include <cstdint>
-#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
-#include "dbwaller/adapters/adapter.hpp"
-#include "dbwaller/adapters/request_context.hpp"
-#include "dbwaller/core/gateway.hpp"
-#include "dbwaller/core/sharded_engine.hpp"
-#include "dbwaller/policy/rules.hpp"
-
-class FastAdapter : public dbwaller::adapters::Adapter {
+class GlobalMutexCache {
 public:
-    std::optional<dbwaller::adapters::FetchResult> fetch_one(
-        const std::string& key,
-        const dbwaller::adapters::RequestContext&
-    ) override {
-        dbwaller::adapters::FetchResult r;
-        r.value = "PAYLOAD_FOR_" + key;
-        r.ttl_ms = 60'000; // not used by Gateway caching (Gateway uses policy PutOptions), but fine
-        return r;
+    explicit GlobalMutexCache(std::vector<std::string> ids) : ids_(std::move(ids)) {}
+
+    void preload() {
+        std::unique_lock<std::shared_mutex> lock(mu_);
+        for (const auto& id : ids_) {
+            data_[id] = make_value(id);
+        }
     }
+
+    std::string get(const std::string& id) {
+        {
+            std::shared_lock<std::shared_mutex> lock(mu_);
+            auto it = data_.find(id);
+            if (it != data_.end()) {
+                return it->second;
+            }
+        }
+
+        std::unique_lock<std::shared_mutex> lock(mu_);
+        auto [it, inserted] = data_.emplace(id, make_value(id));
+        if (!inserted && it->second.empty()) {
+            it->second = make_value(id);
+        }
+        return it->second;
+    }
+
+    void put(const std::string& id) {
+        std::unique_lock<std::shared_mutex> lock(mu_);
+        data_[id] = make_value(id);
+    }
+
+private:
+    static std::string make_value(const std::string& id) {
+        return "PAYLOAD_FOR_" + id;
+    }
+
+    std::shared_mutex mu_;
+    std::unordered_map<std::string, std::string> data_;
+    std::vector<std::string> ids_;
 };
 
-struct ShardedBenchEnv {
+struct BaselineBenchEnv {
     using Clock = std::chrono::steady_clock;
 
-    int shards;
     int keys_count;
     int total_ops;
     int write_percent;
     int key_skew;
 
-    dbwaller::core::ShardedEngine engine;
-    dbwaller::core::Gateway waller;
-    std::shared_ptr<dbwaller::adapters::Adapter> adapter;
-
-    dbwaller::policy::PolicyRuleSet rules;
-    dbwaller::adapters::RequestContext ctx;
     std::vector<std::string> ids;
+    GlobalMutexCache cache;
 
     std::barrier<> start_barrier;
     std::barrier<> end_barrier;
@@ -54,60 +74,32 @@ struct ShardedBenchEnv {
     std::atomic<int64_t> read_ops{0};
     std::atomic<int64_t> write_ops{0};
 
-    ShardedBenchEnv(int threads, int shards_, int keys_count_, int total_ops_, int write_percent_, int key_skew_)
-        : shards(shards_),
-          keys_count(keys_count_),
+    BaselineBenchEnv(int threads, int keys_count_, int total_ops_, int write_percent_, int key_skew_)
+        : keys_count(keys_count_),
           total_ops(total_ops_),
           write_percent(write_percent_),
           key_skew(key_skew_),
-          engine(make_engine_cfg_(shards_)),
-          waller(engine),
-          adapter(std::make_shared<FastAdapter>()),
+          ids(build_ids(keys_count_)),
+          cache(ids),
           start_barrier(threads),
           end_barrier(threads) {
-        dbwaller::policy::Rule r;
-        r.scope = dbwaller::policy::CacheScope::Public;
-        r.ttl_ms = 60'000;
-        r.swr_ms = 0;
-        r.stale_ttl_ms = 0;
-        r.serve_stale_on_error = false;
-        rules.set_default(r);
-
-        ctx.tenant = "bench";
-        ctx.viewer_id = "anon";
-        ctx.locale = "en";
-        dbwaller::adapters::set_claims_fingerprint(ctx, {"user"}, {"read"});
-
-        ids.reserve(static_cast<size_t>(keys_count));
-        for (int i = 0; i < keys_count; ++i) {
-            ids.push_back(std::to_string(i));
-        }
+        cache.preload();
     }
 
-    static dbwaller::core::ShardedEngine::Config make_engine_cfg_(int shards) {
-        dbwaller::core::ShardedEngine::Config cfg;
-        cfg.num_shards = shards;
-        cfg.max_bytes_total = 512ull * 1024ull * 1024ull; // 512MB
-        cfg.enable_compute_pool = true;
-        cfg.compute_threads = std::max(2, static_cast<int>(std::thread::hardware_concurrency() / 2));
-        cfg.compute_max_queue = 1024;
-        cfg.compute_timeout_ms = 1500;
-        cfg.backpressure = dbwaller::core::ShardedEngine::BackpressureMode::RunInline;
-        cfg.sweep_interval_ms = 200;
-        return cfg;
-    }
-
-    void populate_all_keys() {
+    static std::vector<std::string> build_ids(int keys_count) {
+        std::vector<std::string> out;
+        out.reserve(static_cast<size_t>(keys_count));
         for (int i = 0; i < keys_count; ++i) {
-            (void)waller.get_or_fetch_object_ruled(rules, "bench", ids[i], "get", ctx, adapter);
+            out.push_back(std::to_string(i));
         }
+        return out;
     }
 };
 
-static std::atomic<ShardedBenchEnv*> g_env{nullptr};
+static std::atomic<BaselineBenchEnv*> g_env{nullptr};
 
-static ShardedBenchEnv* wait_env() {
-    ShardedBenchEnv* env = nullptr;
+static BaselineBenchEnv* wait_env() {
+    BaselineBenchEnv* env = nullptr;
     while ((env = g_env.load(std::memory_order_acquire)) == nullptr) {
         std::this_thread::yield();
     }
@@ -131,28 +123,27 @@ static int pick_key_index(uint32_t rnd, int keys_count, int key_skew) {
     return hot_keys + static_cast<int>(rnd % static_cast<uint32_t>(cold_keys));
 }
 
-static void BM_DBWaller_Mixed(benchmark::State& state) {
-    const int shards = static_cast<int>(state.range(0));
+static void BM_GlobalMutex_Mixed(benchmark::State& state) {
+    const int shards = static_cast<int>(state.range(0)); // retained for matrix parity with sharded bench
     const int keys_count = static_cast<int>(state.range(1));
     const int total_ops = static_cast<int>(state.range(2));
     const int write_percent = static_cast<int>(state.range(3));
-    const int key_skew = static_cast<int>(state.range(4)); // 0=uniform, 1=hotspot
+    const int key_skew = static_cast<int>(state.range(4));
     const int threads = static_cast<int>(state.threads());
 
     if (state.thread_index() == 0) {
-        auto* env = new ShardedBenchEnv(threads, shards, keys_count, total_ops, write_percent, key_skew);
-        env->populate_all_keys();
+        auto* env = new BaselineBenchEnv(threads, keys_count, total_ops, write_percent, key_skew);
         g_env.store(env, std::memory_order_release);
     }
 
-    ShardedBenchEnv* env = wait_env();
+    BaselineBenchEnv* env = wait_env();
 
     for (auto _ : state) {
         const int my_ops = (total_ops + threads - 1) / threads;
         int64_t local_reads = 0;
         int64_t local_writes = 0;
 
-        uint64_t x = 0x9E3779B97F4A7C15ull ^ (static_cast<uint64_t>(state.thread_index()) + 1);
+        uint64_t x = 0xD2B74407B1CE6E93ull ^ (static_cast<uint64_t>(state.thread_index()) + 1);
         auto next_u32 = [&]() -> uint32_t {
             x ^= x >> 12;
             x ^= x << 25;
@@ -163,7 +154,7 @@ static void BM_DBWaller_Mixed(benchmark::State& state) {
         env->start_barrier.arrive_and_wait();
 
         if (state.thread_index() == 0) {
-            const auto t0 = ShardedBenchEnv::Clock::now().time_since_epoch();
+            const auto t0 = BaselineBenchEnv::Clock::now().time_since_epoch();
             env->read_ops.store(0, std::memory_order_release);
             env->write_ops.store(0, std::memory_order_release);
             env->start_ns.store(
@@ -178,26 +169,11 @@ static void BM_DBWaller_Mixed(benchmark::State& state) {
             const bool is_write = (rnd % 100) < static_cast<uint32_t>(write_percent);
 
             if (is_write) {
-                auto res = env->waller.get_or_fetch_object_ruled(
-                    env->rules,
-                    "bench",
-                    env->ids[idx],
-                    "put",
-                    env->ctx,
-                    env->adapter
-                );
-                benchmark::DoNotOptimize(res);
+                env->cache.put(env->ids[idx]);
                 ++local_writes;
             } else {
-                auto res = env->waller.get_or_fetch_object_ruled(
-                    env->rules,
-                    "bench",
-                    env->ids[idx],
-                    "get",
-                    env->ctx,
-                    env->adapter
-                );
-                benchmark::DoNotOptimize(res);
+                auto value = env->cache.get(env->ids[idx]);
+                benchmark::DoNotOptimize(value);
                 ++local_reads;
             }
         }
@@ -208,7 +184,7 @@ static void BM_DBWaller_Mixed(benchmark::State& state) {
         env->end_barrier.arrive_and_wait();
 
         if (state.thread_index() == 0) {
-            const auto t1 = ShardedBenchEnv::Clock::now().time_since_epoch();
+            const auto t1 = BaselineBenchEnv::Clock::now().time_since_epoch();
             env->end_ns.store(
                 std::chrono::duration_cast<std::chrono::nanoseconds>(t1).count(),
                 std::memory_order_release
@@ -219,8 +195,7 @@ static void BM_DBWaller_Mixed(benchmark::State& state) {
             const double sec = static_cast<double>(end_ns - start_ns) / 1e9;
 
             state.SetIterationTime(sec);
-
-            state.counters["impl"] = 1;
+            state.counters["impl"] = 0;
             state.counters["keys"] = keys_count;
             state.counters["ops"] = total_ops;
             state.counters["read_percent"] = 100 - write_percent;
@@ -230,8 +205,7 @@ static void BM_DBWaller_Mixed(benchmark::State& state) {
             state.counters["threads"] = threads;
             state.counters["reads"] = static_cast<double>(env->read_ops.load(std::memory_order_acquire));
             state.counters["writes"] = static_cast<double>(env->write_ops.load(std::memory_order_acquire));
-            state.counters["dbwaller_ops_per_sec"] =
-                benchmark::Counter(total_ops, benchmark::Counter::kIsRate);
+            state.counters["baseline_ops_per_sec"] = benchmark::Counter(total_ops, benchmark::Counter::kIsRate);
         }
     }
 
@@ -257,7 +231,7 @@ static void ApplyCommonMatrix(benchmark::internal::Benchmark* b) {
     }
 }
 
-BENCHMARK(BM_DBWaller_Mixed)
+BENCHMARK(BM_GlobalMutex_Mixed)
     ->Apply(ApplyCommonMatrix)
     ->ThreadRange(1, 32)
     ->UseManualTime()
