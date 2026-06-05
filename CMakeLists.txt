@@ -49,11 +49,17 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
+set(DBWALLER_SPDLOG_TARGET spdlog::spdlog)
+if(TARGET spdlog::spdlog_header_only)
+    set(DBWALLER_SPDLOG_TARGET spdlog::spdlog_header_only)
+endif()
+
 target_link_libraries(dbwaller
     PUBLIC
         OpenSSL::Crypto
-        nlohmann_json::nlohmann_json
-        spdlog::spdlog
+    PRIVATE
+        $<LINK_ONLY:nlohmann_json::nlohmann_json>
+        $<LINK_ONLY:${DBWALLER_SPDLOG_TARGET}>
 )
 
 if(DBWALLER_BUILD_APPS)

@@ -66,9 +66,9 @@ class DBWallerConan(ConanFile):
             )
 
     def requirements(self):
-        self.requires("spdlog/1.14.1")
-        self.requires("openssl/3.3.2")
-        self.requires("nlohmann_json/3.11.3")
+        self.requires("spdlog/1.15.3")
+        self.requires("openssl/3.5.6")
+        self.requires("nlohmann_json/3.12.0")
 
         if self.options.with_tests:
             self.requires("catch2/3.7.1")
