@@ -27,6 +27,8 @@ add_executable(dbwaller_concurrency_tests
 	concurrency/thread_pool_tests.cpp
 	core/compute_lifecycle_tests.cpp
 	core/gateway_lifetime_tests.cpp
+	core/invalidation_race_tests.cpp
+	core/load_ticket_tests.cpp
 )
 target_link_libraries(dbwaller_concurrency_tests PRIVATE dbwaller Catch2::Catch2WithMain)
 include(Catch)

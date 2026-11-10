@@ -148,6 +148,24 @@ ShardedEngine::GetResult ShardedEngine::get_swr(const std::string& key) {
 }
 
 void ShardedEngine::put(const std::string& key, std::string encrypted_value, const PutOptions& opt) {
+    std::lock_guard publication_lock(publication_mu_);
+    put_locked(key, std::move(encrypted_value), opt);
+}
+
+LoadTicket ShardedEngine::begin_load(const std::string& key) {
+    std::lock_guard publication_lock(publication_mu_);
+    return LoadTicket(key, generation_);
+}
+
+PublishStatus ShardedEngine::put_if_current(const LoadTicket& ticket,
+    std::string encrypted_value, const PutOptions& opt) {
+    std::lock_guard publication_lock(publication_mu_);
+    if (ticket.generation_ != generation_) return PublishStatus::Invalidated;
+    put_locked(ticket.key_, std::move(encrypted_value), opt);
+    return PublishStatus::Stored;
+}
+
+void ShardedEngine::put_locked(const std::string& key, std::string encrypted_value, const PutOptions& opt) {
     Shard& s = shards_[shard_index(key)];
 
     CacheEntry e;
@@ -204,6 +222,8 @@ void ShardedEngine::put(const std::string& key, std::string encrypted_value, con
 }
 
 void ShardedEngine::invalidate_key(const std::string& key) {
+    std::lock_guard publication_lock(publication_mu_);
+    generation_ = std::make_shared<const LoadTicket::Generation>();
     Shard& s = shards_[shard_index(key)];
     std::unique_lock lk(s.mu);
     if (s.entries.find(key) != s.entries.end()) {
@@ -213,6 +233,8 @@ void ShardedEngine::invalidate_key(const std::string& key) {
 }
 
 void ShardedEngine::invalidate_tag(const std::string& tag) {
+    std::lock_guard publication_lock(publication_mu_);
+    generation_ = std::make_shared<const LoadTicket::Generation>();
     for (auto& s : shards_) {
         std::unique_lock lk(s.mu);
         auto it = s.tag_index.find(tag);
@@ -236,11 +258,14 @@ void ShardedEngine::invalidate_tag(const std::string& tag) {
 // Refresh failure marking (keep stale entry!)
 // -------------------------
 
-void ShardedEngine::mark_refresh_failure(size_t shard_idx, const std::string& key) {
+void ShardedEngine::mark_refresh_failure(size_t shard_idx, const std::string& key,
+    const std::shared_ptr<Inflight>& inflight) {
+    std::lock_guard publication_lock(publication_mu_);
+    if (inflight->ticket.generation_ != generation_) return;
     Shard& s = shards_[shard_idx];
     std::unique_lock lk(s.mu);
     auto it = s.entries.find(key);
-    if (it == s.entries.end()) return;
+    if (it == s.entries.end() || it->second.version != inflight->refresh_entry) return;
 
     CacheEntry& e = it->second;
     e.refresh_attempted = true;
@@ -269,14 +294,13 @@ void ShardedEngine::run_compute_and_publish(
         value = std::move(out.first);
         opt = std::move(out.second);
 
-        // Store in cache (thread-safe)
-        put(key, value, opt);
+        const auto status = put_if_current(inflight->ticket, value, opt);
 
-        finish_compute(shard_idx, key, inflight, std::move(value), true);
+        finish_compute(shard_idx, key, inflight, std::move(value), status == PublishStatus::Stored);
     } catch (...) {
         // If this is a refresh: DO NOT delete cache entry. Mark refresh failure.
         if (is_refresh) {
-            mark_refresh_failure(shard_idx, key);
+            mark_refresh_failure(shard_idx, key, inflight);
         }
 
         finish_compute(shard_idx, key, inflight, {}, false);
@@ -287,13 +311,14 @@ void ShardedEngine::finish_compute(size_t shard_idx, const std::string& key,
     const std::shared_ptr<Inflight>& inflight, std::string value, bool ok) {
     Shard& s = shards_[shard_idx];
     {
+        std::lock_guard publication_lock(publication_mu_);
         std::lock_guard<std::mutex> g(s.inflight_mu);
         {
             std::lock_guard<std::mutex> lock(inflight->mu);
-            inflight->value = std::move(value);
-            inflight->ok = ok;
+            inflight->invalidated = inflight->ticket.generation_ != generation_;
+            inflight->ok = ok && !inflight->invalidated;
+            inflight->value = inflight->ok ? std::move(value) : std::string{};
             inflight->done = true;
-            inflight->error = ok ? "" : "compute failed";
         }
         // Retire exactly this flight before waking callers that may retry.
         auto it = s.inflight.find(key);
@@ -322,11 +347,12 @@ std::string ShardedEngine::get_or_compute(
     bool leader = false;
 
     {
+        std::lock_guard publication_lock(publication_mu_);
         std::lock_guard<std::mutex> g(s.inflight_mu);
         auto it = s.inflight.find(key);
-        if (it == s.inflight.end()) {
-            inflight = std::make_shared<Inflight>();
-            s.inflight.emplace(key, inflight);
+        if (it == s.inflight.end() || it->second->ticket.generation_ != generation_) {
+            inflight = std::make_shared<Inflight>(LoadTicket(key, generation_));
+            s.inflight.insert_or_assign(key, inflight);
             leader = true;
             inflight_leaders_.fetch_add(1, std::memory_order_relaxed);
         } else {
@@ -350,10 +376,12 @@ std::string ShardedEngine::get_or_compute(
                     compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
                     if (cfg_.backpressure == BackpressureMode::FailFast) {
                         finish_compute(idx, key, inflight, {}, false);
-                        return {};
+                    } else {
+                        work(std::stop_token{});
                     }
+                } else {
+                    work(std::stop_token{});
                 }
-                work(std::stop_token{});
             }
         } catch (...) {
             // Copying/allocating the queued task can fail after installing a
@@ -375,6 +403,7 @@ std::string ShardedEngine::get_or_compute(
         }
     }
 
+    if (inflight->invalidated) throw LoadInvalidatedError();
     if (!inflight->ok) return "";
     return inflight->value;
 }
@@ -393,11 +422,17 @@ void ShardedEngine::trigger_refresh(
     bool leader = false;
 
     {
+        std::lock_guard publication_lock(publication_mu_);
         std::lock_guard<std::mutex> g(s.inflight_mu);
         auto it = s.inflight.find(key);
-        if (it == s.inflight.end()) {
-            inflight = std::make_shared<Inflight>();
-            s.inflight.emplace(key, inflight);
+        if (it == s.inflight.end() || it->second->ticket.generation_ != generation_) {
+            inflight = std::make_shared<Inflight>(LoadTicket(key, generation_));
+            {
+                std::shared_lock entry_lock(s.mu);
+                const auto entry = s.entries.find(key);
+                if (entry != s.entries.end()) inflight->refresh_entry = entry->second.version;
+            }
+            s.inflight.insert_or_assign(key, inflight);
             leader = true;
         } else {
             refresh_skipped_inflight_.fetch_add(1, std::memory_order_relaxed);
@@ -420,7 +455,7 @@ void ShardedEngine::trigger_refresh(
             if (compute_pool_) {
                 compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
                 if (cfg_.backpressure == BackpressureMode::FailFast) {
-                    mark_refresh_failure(idx, key);
+                    mark_refresh_failure(idx, key, inflight);
                     finish_compute(idx, key, inflight, {}, false);
                     return;
                 }
@@ -428,7 +463,7 @@ void ShardedEngine::trigger_refresh(
             work(std::stop_token{});
         }
     } catch (...) {
-        mark_refresh_failure(idx, key);
+        mark_refresh_failure(idx, key, inflight);
         finish_compute(idx, key, inflight, {}, false);
     }
 }

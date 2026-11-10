@@ -29,6 +29,14 @@ int main() {
 
     engine.put("post:42", "cached-value", options);
     const auto cached = engine.get("post:42");
+    const auto old_load = engine.begin_load("post:42");
+    engine.invalidate_tag("post:42");
+    const auto new_load = engine.begin_load("post:42");
+    if (engine.put_if_current(new_load, "new-value", options) != dbwaller::core::PublishStatus::Stored ||
+        engine.put_if_current(old_load, "outdated", options) != dbwaller::core::PublishStatus::Invalidated ||
+        engine.get("post:42") != "new-value") {
+        return 1;
+    }
     engine.shutdown();
 
     return cached && *cached == "cached-value" ? 0 : 1;

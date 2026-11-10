@@ -26,8 +26,11 @@ the pool, but can block in inline or pool-disabled execution.
 
 `compute_timeout_ms` limits a caller's wait on the flight's condition variable.
 Zero means no wait timeout. Timing out does not cancel queued/active computation,
-erase its flight, or prevent a later successful cache publication. Other callers
-can still share that computation. Inline execution is synchronous and cannot be
+erase its flight, or by itself prevent a later successful cache publication.
+Invalidation does prevent publication and separates old and new flights; see
+[Cache invalidation](cache-invalidation.md) for `LoadInvalidatedError`, refresh
+failure handling, and the external load-ticket API. Other callers in the same
+generation can still share a computation. Inline execution is synchronous and cannot be
 interrupted by this wait timeout.
 
 Gateway miss and refresh callbacks own the raw key, copied request context,
