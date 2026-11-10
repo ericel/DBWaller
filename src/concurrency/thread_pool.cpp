@@ -19,35 +19,30 @@ ThreadPool::~ThreadPool() {
 }
 
 void ThreadPool::shutdown() {
-    // std::jthread requests stop automatically when destroyed.
-    // Wake all workers so they can observe stop and exit promptly.
+    // Only one caller may touch the jthreads while joining. Admission and queue
+    // access use a separate mutex, which is never held while executing user code.
+    std::lock_guard shutdown_lock(shutdown_mu_);
     {
-        std::lock_guard<std::mutex> lk(mu_);
-        // Signal stop (though jthreads do this via stop_token, 
-        // notifying CV is critical to wake sleeping workers)
+        std::lock_guard lock(mu_);
+        closing_ = true;
     }
-    cv_.notify_all();
-
-    // Explicitly clear workers if needed, or let jthread destructors handle join
-    // Since jthreads join on destruction, we just need to ensure they wake up.
-    // However, if you want explicit early shutdown before destruction:
     for (auto& worker : workers_) {
         worker.request_stop();
     }
     cv_.notify_all();
-    
-    // Note: Since you are using std::jthread, they will join automatically 
-    // when the vector is cleared or the pool is destroyed.
-    // But to force a sync point now:
-    workers_.clear(); 
+    for (auto& worker : workers_) {
+        if (worker.joinable()) worker.join();
+    }
+    // Synchronize size() with worker cleanup as well as concurrent shutdowns.
+    std::lock_guard lock(mu_);
+    workers_.clear();
 }
 
 bool ThreadPool::try_submit(Task task) {
     {
         std::lock_guard<std::mutex> lk(mu_);
 
-        // Backpressure: reject if queue is full (if bounded)
-        if (max_queue_ > 0 && q_.size() >= max_queue_) {
+        if (closing_ || (max_queue_ > 0 && q_.size() >= max_queue_)) {
             return false;
         }
 
@@ -59,27 +54,31 @@ bool ThreadPool::try_submit(Task task) {
 
 void ThreadPool::submit_or_throw(Task task) {
     if (!try_submit(std::move(task))) {
-        throw std::runtime_error("ThreadPool queue is full (backpressure)");
+        throw std::runtime_error("ThreadPool queue is full or shutdown has started");
     }
 }
 
 void ThreadPool::worker_loop(std::stop_token st) {
-    while (!st.stop_requested()) {
+    for (;;) {
         Task task;
 
         {
             std::unique_lock<std::mutex> lk(mu_);
-            cv_.wait(lk, st, [&] { return st.stop_requested() || !q_.empty(); });
+            cv_.wait(lk, st, [&] { return closing_ || !q_.empty(); });
 
-            if (st.stop_requested()) return;
-            if (q_.empty()) continue;
+            if (q_.empty()) {
+                if (closing_ || st.stop_requested()) return;
+                continue;
+            }
 
             task = std::move(q_.front());
             q_.pop_front();
         }
 
-        // Execute outside lock
-        task(st);
+        // Accepted tasks drain even with stop requested. Packaged tasks publish
+        // exceptions through their futures; a fire-and-forget exception must not
+        // terminate the worker and strand the rest of the queue.
+        try { task(st); } catch (...) {}
     }
 }
 

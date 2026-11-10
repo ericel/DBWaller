@@ -40,6 +40,12 @@ struct FetchResult {
  *
  * This is intentionally synchronous for Model A embedded; DBWaller already runs it on its compute pool.
  * Later, we can add async adapters (coroutines/futures) without breaking this API.
+ *
+ * Gateway compute callbacks retain their shared Adapter and copy RequestContext
+ * and request inputs. A waiting request may time out before fetch_one completes.
+ * Adapters must support their application's concurrent calls and eventually
+ * return; engine shutdown waits for accepted callbacks rather than detaching or
+ * forcibly terminating them. Do not call that engine's shutdown from fetch_one.
  */
 class Adapter {
 public:

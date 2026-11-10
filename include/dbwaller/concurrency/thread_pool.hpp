@@ -32,13 +32,13 @@ public:
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
-    // Try to enqueue a task. Returns false if queue is full (backpressure).
+    // Returns false if the queue is full or shutdown has closed admission.
     bool try_submit(Task task);
 
-    // Convenience: throws std::runtime_error if queue is full.
+    // Throws std::runtime_error if the queue is full or admission is closed.
     void submit_or_throw(Task task);
 
-    // Enqueue a task that returns a value. Returns nullopt if queue is full.
+    // Returns nullopt if the queue is full or admission is closed.
     template <typename Fn>
     auto try_submit_future(Fn&& fn)
         -> std::optional<std::future<std::invoke_result_t<Fn>>> {
@@ -59,10 +59,12 @@ public:
         return fut;
     }
 
-    std::size_t size() const { return workers_.size(); }
+    std::size_t size() const { std::lock_guard lock(mu_); return workers_.size(); }
     std::size_t max_queue() const { return max_queue_; }
 
-    // Graceful shutdown
+    // Close admission, request cooperative stop, drain accepted work, and join.
+    // Concurrent/repeated calls wait for the same completion. Callbacks must
+    // eventually return; calling shutdown from this pool's task is unsupported.
     void shutdown();
 
 private:
@@ -72,6 +74,8 @@ private:
     std::condition_variable_any cv_;
     std::deque<Task> q_;
 
+    std::mutex shutdown_mu_;
+    bool closing_ = false; // guarded by mu_
     std::vector<std::jthread> workers_;
     std::size_t max_queue_ = 0;
 };

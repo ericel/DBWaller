@@ -22,6 +22,9 @@ Most modern apps eventually depend on external cache infrastructure (Redis/Memca
 - **Batch hydration hooks** for fan-out and aggregate workloads
 - **Observability hooks** (stats, logging, metrics export planned)
 
+For compute queue backpressure, callback ownership, request timeouts, and graceful
+shutdown, see [Compute lifecycle](docs/compute-lifecycle.md).
+
 ## Project Structure
 
 - `include/dbwaller/` — public headers (core, concurrency, policy, crypto, adapters)
