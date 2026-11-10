@@ -104,13 +104,18 @@ jobs:
           -o '&:build_apps=False'
 
       - name: Upload Conan package to Artifactory (optional)
-        if: ${{ vars.ARTIFACTORY_REMOTE_NAME != '' && vars.ARTIFACTORY_REMOTE_URL != '' && secrets.ARTIFACTORY_USERNAME != '' && secrets.ARTIFACTORY_PASSWORD != '' }}
+        if: ${{ vars.ARTIFACTORY_REMOTE_NAME != '' && vars.ARTIFACTORY_REMOTE_URL != '' }}
         env:
           ARTIFACTORY_REMOTE_NAME: ${{ vars.ARTIFACTORY_REMOTE_NAME }}
           ARTIFACTORY_REMOTE_URL: ${{ vars.ARTIFACTORY_REMOTE_URL }}
           ARTIFACTORY_USERNAME: ${{ secrets.ARTIFACTORY_USERNAME }}
           ARTIFACTORY_PASSWORD: ${{ secrets.ARTIFACTORY_PASSWORD }}
         run: |
+          # GitHub does not allow the secrets context in step conditions.
+          if [ -z "${ARTIFACTORY_USERNAME}" ] || [ -z "${ARTIFACTORY_PASSWORD}" ]; then
+            echo "Skipping optional Artifactory upload: credentials are not configured."
+            exit 0
+          fi
           conan remote add "${ARTIFACTORY_REMOTE_NAME}" "${ARTIFACTORY_REMOTE_URL}" --force
           conan remote login "${ARTIFACTORY_REMOTE_NAME}" "${ARTIFACTORY_USERNAME}" -p "${ARTIFACTORY_PASSWORD}"
           conan upload "dbwaller/${{ steps.version.outputs.value }}" --remote="${ARTIFACTORY_REMOTE_NAME}" --confirm

@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Fixed
 
+- Fix release workflow validation by checking optional Artifactory credentials
+  inside the upload step instead of referencing secrets in its condition.
 - Preserve miss and refresh callbacks when a saturated compute queue falls back
   to inline execution, including callbacks with large captured values.
 - Keep gateway miss inputs, policy/tags, and the shared adapter alive when queued
