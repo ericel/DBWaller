@@ -1,0 +1,154 @@
+Slide 1: Title Slide
+DBWaller: A Concurrent, Observable, Application-Layer Cache
+A Capstone Project Report of MSIT 5910 
+Submitted by:
+[Your First Name] [Your Last Name] (Student ID) For the partial fulfilment of the requirements for the degree of Master of Science in Information Technology 
+Supervised by:
+[Supervisor’s Name] 
+Department of CS and MSIT
+University of the People, Pasadena, CA 91101, United States Term, Month, Year 
+
+Slide 2: Introduction
+Title: The Enterprise Caching Bottleneck
+Content:
+
+The Problem: As API traffic scales, traditional infrastructure-level caches fail to provide application-aware semantics.
+
+Cache Stampedes: High-demand expirations cause massive concurrent queries, overloading the origin database.
+
+Stale Authorization: Time-To-Live (TTL) expiration risks serving outdated privilege states, creating security exposures.
+
+The Solution: DBWaller, a C++20 data-plane gateway that resolves these issues by moving caching logic directly into the host process memory space.
+**
+
+Speaker Notes: Welcome to my capstone presentation. Today, I'll be discussing DBWaller. Modern enterprise APIs rely on external caches to reduce load, but this creates vulnerabilities like cache stampedes and stale data exposure. DBWaller addresses these by moving the cache in-process and engineering it for strict correctness.
+
+Slide 3: Project Objectives
+Title: Requirements Elicitation & Prioritization
+Content:
+
+
+Active Elicitation: Gathered requirements from real-world practitioners via targeted polls in professional engineering communities.
+
+
+Hypothesis vs. Reality: Initial assumptions prioritized raw computational speed ("Stampede Protection").
+
+Community Consensus: Empirical elicitation inverted this priority. Senior engineers identified "Invalidation Correctness" as the most critical threat to system trust.
+**
+
+Speaker Notes: To define the project's objectives, I didn't rely on academic assumptions. Instead, I polled engineering communities. While I thought performance would win, the community overwhelmingly told me that invalidation correctness—avoiding stale data—is the true priority.
+
+Slide 4: Project Objectives
+Title: Finalized Software Requirements
+Content:
+
+
+Req 1 (Critical Must-Have): Tag-Based Invalidation. The system must guarantee atomic group invalidation to prevent serving stale data.
+
+
+Req 2 (High Priority): Stampede Protection (Single-Flight). The system must coalesce concurrent requests to prevent database overloads.
+
+
+Req 3 (High Priority): Observability & Debugging. The cache must expose internal states (hits/misses/stale-serves) to align with enterprise maintainability goals.
+
+Speaker Notes: Based on that field research, the objectives were locked in. The system had to guarantee atomic purging of related keys, prevent thundering herds through request coalescing, and be highly transparent for debugging.
+
+Slide 5: Methodologies Used
+Title: Architectural Design: Sharded Concurrency
+Content:
+
+The Bottleneck: Global mutexes force all threads into a sequential queue, stalling the CPU.
+
+The DBWaller Approach: A parallel, 64-way sharded lock architecture.
+
+Mathematical Partitioning: Transforms one massive contention domain into 64 independent lock domains.
+
+Reader-Writer Optimization: Utilizes C++20 std::shared_mutex to allow simultaneous read access while exclusively isolating writes.
+**
+
+Speaker Notes: To achieve these objectives, my methodology focused on concurrency design. I built a 64-way sharded architecture using modern C++ reader-writer locks, which eliminates the sequential bottlenecks found in traditional key-value stores.
+
+Slide 6: Methodologies Used
+Title: Algorithmic Implementation: Coalescing & Invalidation
+Content:
+
+Single-Flight Coalescing: * An active-flight registry intercepts concurrent misses.
+
+A "Leader Thread" fetches the backend data, while "Waiter Threads" suspend on a shared future, strictly limiting network calls.
+
+Tag-Based Reverse Indexing:
+
+Maintains an internal index linking abstract tags (e.g., tenant_A) to concrete primary keys.
+
+A single invalidation command atomically wipes all related data, enforcing strict security.
+
+Speaker Notes: Beyond basic locking, the core logic relies on two advanced algorithms. Single-flight coalescing safely suspends redundant threads to protect the database, while a reverse indexing mechanism guarantees that when user permissions change, all associated cached keys are instantly destroyed.
+
+Slide 7: Results
+Title: Automated Validation & Telemetry
+Content:
+
+Testing Infrastructure: Developed a deterministic CTest harness integrated via an automated CI/CD pipeline.
+
+Mathematical Verification: 100% pass rate across strict memory boundary and deadlock prevention test suites.
+
+Execution Efficiency: The entire suite—covering isolation, invalidation, and thundering herd scenarios—executes in just 2.78 seconds.
+
+Deep Observability: Runtime engine successfully exposes introspection metrics (misses, inflight leaders) previously unavailable in generic caches.
+**
+
+Speaker Notes: The results of the implementation were validated using automated system testing. The CTest suite proved that the coalescing and invalidation mechanisms worked flawlessly under simulated load, passing all checks in under three seconds. Furthermore, the dashboard proved the observability requirements were met.
+
+Slide 8: Results
+Title: Empirical Benchmarking
+Content:
+
+Scale of Testing: 240 distinct scenarios were executed repeatedly to map performance frontiers under write-mutation pressure.
+
+Throughput Gains: DBWaller’s sharded architecture achieved a 7.80x throughput improvement over a global-mutex baseline at 32 threads.
+
+Performance Stability: Reader-writer locks drastically reduced mean latency, yielding a highly stable median coefficient of variation (CV) of just 7.5%.
+**
+
+Speaker Notes: In addition to functional testing, empirical benchmarking proved the efficiency of the sharded architecture. Under heavy contention, DBWaller sustained a 7.8 times throughput improvement over standard locking mechanisms, demonstrating high scalability.
+
+Slide 9: Potential Impact
+Title: Application Caching as a Security Boundary
+Content:
+
+Backend Protection: Single-flight coalescing prevents Denial of Service (DoS) amplification against origin databases during cache expiration spikes.
+
+Authorization Integrity: Tag-based indexing eradicates stale privilege escalation by guaranteeing atomic invalidation of revoked user states.
+
+Host Stability: Strict memory boundaries and LRU eviction prevent unbounded memory growth from crashing the host application.
+
+Core Insight: DBWaller is not just a speed optimization; it is a vital structural safeguard for API continuity.
+
+Speaker Notes: The potential impact of this project shifts how we view caching. It is no longer just a tool to make things faster; it is a fundamental security boundary that protects backend infrastructure from traffic exhaustion and guarantees authorization integrity.
+
+Slide 10: Conclusion
+Title: Summary of Capstone Achievements
+Content:
+
+
+Empirically Grounded: Requirements were driven by active engineering consensus rather than theoretical assumptions.
+
+Proven Resilience: Sharding, coalescing, and SWR drastically improve concurrency behavior and invalidation correctness.
+
+Application-Aware Advantage: Embedding cache logic inside the host unlocks deep observability and deterministic control.
+
+Future Integration: Future research will explore syncing the in-process memory state via distributed Redis/Kafka Pub-Sub backplanes.
+
+Speaker Notes: To conclude, DBWaller successfully models and solves the most severe caching failure modes. By grounding the design in empirical research and engineering it for absolute resilience, the project delivers an enterprise-ready caching component.
+
+Slide 11: References
+Title: References
+Content:
+
+Chen, X., Li, J., & Wang, Y. (2022). On the analysis of cache invalidation with LRU replacement. IEEE Transactions on Network and Service Management, 19(3), 2548-2561.
+
+Colakel, S. (2025). SingleFlight: Smart Request Deduplication. Stackacademic.
+
+David, O. (2023). Software documentation best practices [with examples]. Helpjuice.
+
+Vattani, A., Chierichetti, F., & Lowenstein, K. (2015). Optimal probabilistic cache stampede prevention. Proceedings of the VLDB Endowment, 8(8), 886–897.

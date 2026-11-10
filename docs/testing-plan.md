@@ -279,6 +279,12 @@ This enables selective runs:
 
 ## Test Case Design Rules
 
+The compute lifecycle regressions in `tests/unit/concurrency` and `tests/unit/core`
+are individually registered with `unit`, `regression`, and `concurrency` labels,
+and a 45-second CTest watchdog. They run in both Tier A and Tier B. See
+[Compute lifecycle](compute-lifecycle.md) for targeted repeat runs, sanitizer
+commands, and callback/shutdown semantics.
+
 - Deterministic by default: bounded timing windows and clear pass criteria.
 - No external network dependency in unit/functional/regression suites.
 - Explicit assertions on outcomes and critical counters.

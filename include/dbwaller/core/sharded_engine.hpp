@@ -100,7 +100,8 @@ public:
         const std::function<std::pair<std::string, PutOptions>()>& compute_fn
     );
 
-    // Stale path: schedule refresh (non-blocking). If already inflight, do nothing.
+    // Stale path: schedule refresh. RunInline/pool-disabled execution may block.
+    // If already inflight or shutdown has started, do nothing.
     void trigger_refresh(
         const std::string& key,
         std::function<std::pair<std::string, PutOptions>()> compute_fn
@@ -113,12 +114,29 @@ public:
     }
 
 
-    // Graceful shutdown: stops background threads.
-    // Call this BEFORE destroying any adapters this engine might be using.
+    // Close compute admission and finish accepted work, including inline work.
+    // Concurrent/repeated calls wait for completion. Callbacks must return;
+    // shutdown from this engine's own compute callback is unsupported.
+    // Stop external callers before destroying the engine. Cache reads remain
+    // available after explicit shutdown while the engine is still alive.
     void shutdown();
 
 
 private:
+    // Counts API calls that can run inline or wait on a shared computation.
+    // Queued callbacks that outlive a caller are covered by the pool's drain.
+    class ComputeCall {
+    public:
+        explicit ComputeCall(ShardedEngine& engine);
+        ~ComputeCall();
+        ComputeCall(const ComputeCall&) = delete;
+        ComputeCall& operator=(const ComputeCall&) = delete;
+        explicit operator bool() const { return admitted_; }
+    private:
+        ShardedEngine& engine_;
+        bool admitted_ = false;
+    };
+
     struct CacheEntry {
         std::string encrypted_value;
         uint32_t size_bytes = 0;
@@ -180,11 +198,23 @@ private:
 
     void mark_refresh_failure(size_t shard_idx, const std::string& key);
 
+    void finish_compute(size_t shard_idx, const std::string& key,
+                        const std::shared_ptr<Inflight>& inflight,
+                        std::string value, bool ok);
+
     friend class dbwaller::observability::Observer;
 
 private:
     Config cfg_;
     std::vector<Shard> shards_;
+
+    std::mutex shutdown_mu_;
+    std::mutex lifecycle_mu_;
+    std::condition_variable lifecycle_cv_;
+    bool closing_ = false;
+    size_t active_calls_ = 0;
+    std::mutex sweeper_mu_;
+    std::condition_variable_any sweeper_cv_;
 
     std::unique_ptr<dbwaller::concurrency::ThreadPool> compute_pool_;
     std::jthread sweeper_;

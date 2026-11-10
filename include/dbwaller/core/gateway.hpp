@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
+#include <memory>
+#include <stdexcept>
 
 #include "dbwaller/adapters/adapter.hpp"
 #include "dbwaller/core/sharded_engine.hpp"
@@ -120,14 +122,15 @@ public:
             return gr.value;
         }
 
-        // Miss: blocking fill
+        // A waiting request can time out while its queued callback remains alive.
+        // Own the inputs and adapter just as the background refresh path does.
         if (out_meta) out_meta->result = OpResult::Miss;
 
         const std::string filled = engine_.get_or_compute(
             d.cache_key,
-            [&]() -> std::pair<std::string, PutOptions> {
-                const std::string raw_key = std::string(ns) + ":" + std::string(id);
-                auto r = adapter->fetch_one(raw_key, ctx);
+            [raw_key = std::string(ns) + ":" + std::string(id), ctx_copy = ctx,
+             adapter_ptr = std::move(adapter), d, merged_tags]() -> std::pair<std::string, PutOptions> {
+                auto r = adapter_ptr->fetch_one(raw_key, ctx_copy);
                 if (!r) throw std::runtime_error("adapter miss");
 
                 PutOptions opt;

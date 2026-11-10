@@ -36,9 +36,21 @@ ShardedEngine::ShardedEngine(Config cfg)
     sweeper_ = std::jthread([this](std::stop_token st) { sweeper_loop(st); });
 }
 
-// Update Destructor to be safe
 ShardedEngine::~ShardedEngine() {
-    shutdown(); 
+    shutdown();
+}
+
+ShardedEngine::ComputeCall::ComputeCall(ShardedEngine& engine) : engine_(engine) {
+    std::lock_guard lock(engine_.lifecycle_mu_);
+    admitted_ = !engine_.closing_;
+    if (admitted_) ++engine_.active_calls_;
+}
+
+ShardedEngine::ComputeCall::~ComputeCall() {
+    if (!admitted_) return;
+    std::lock_guard lock(engine_.lifecycle_mu_);
+    --engine_.active_calls_;
+    engine_.lifecycle_cv_.notify_all();
 }
 
 // -------------------------
@@ -260,41 +272,43 @@ void ShardedEngine::run_compute_and_publish(
         // Store in cache (thread-safe)
         put(key, value, opt);
 
-        // Publish success
-        {
-            std::lock_guard<std::mutex> lk(inflight->mu);
-            inflight->done = true;
-            inflight->ok = true;
-            inflight->value = value;
-        }
-        inflight->cv.notify_all();
+        finish_compute(shard_idx, key, inflight, std::move(value), true);
     } catch (...) {
         // If this is a refresh: DO NOT delete cache entry. Mark refresh failure.
         if (is_refresh) {
             mark_refresh_failure(shard_idx, key);
         }
 
-        {
-            std::lock_guard<std::mutex> lk(inflight->mu);
-            inflight->done = true;
-            inflight->ok = false;
-            inflight->error = "compute failed";
-        }
-        inflight->cv.notify_all();
+        finish_compute(shard_idx, key, inflight, {}, false);
     }
+}
 
-    // Cleanup inflight map entry
+void ShardedEngine::finish_compute(size_t shard_idx, const std::string& key,
+    const std::shared_ptr<Inflight>& inflight, std::string value, bool ok) {
     Shard& s = shards_[shard_idx];
     {
         std::lock_guard<std::mutex> g(s.inflight_mu);
-        s.inflight.erase(key);
+        {
+            std::lock_guard<std::mutex> lock(inflight->mu);
+            inflight->value = std::move(value);
+            inflight->ok = ok;
+            inflight->done = true;
+            inflight->error = ok ? "" : "compute failed";
+        }
+        // Retire exactly this flight before waking callers that may retry.
+        auto it = s.inflight.find(key);
+        if (it != s.inflight.end() && it->second == inflight) s.inflight.erase(it);
     }
+    inflight->cv.notify_all();
 }
 
 std::string ShardedEngine::get_or_compute(
     const std::string& key,
     const std::function<std::pair<std::string, PutOptions>()>& compute_fn
 ) {
+    ComputeCall call(*this);
+    if (!call) return {};
+
     // 1) Fast path: cache hit (fresh only)
     if (auto hit = get(key)) {
         return *hit;
@@ -323,38 +337,28 @@ std::string ShardedEngine::get_or_compute(
 
     // 3) If leader, schedule compute onto pool (or run inline if needed)
     if (leader) {
-        auto fn_copy = std::function<std::pair<std::string, PutOptions>()>(compute_fn);
-        bool scheduled = false;
-
-        if (compute_pool_) {
-            scheduled = compute_pool_->try_submit(
-                [this, idx, k = std::string(key), inflight, fn = std::move(fn_copy)](std::stop_token) mutable {
+        try {
+            dbwaller::concurrency::ThreadPool::Task work =
+                [this, idx, k = std::string(key), inflight, fn = compute_fn](std::stop_token) mutable {
                     run_compute_and_publish(idx, std::move(k), inflight, std::move(fn), /*is_refresh=*/false);
-                });
+                };
 
-            if (!scheduled) {
-                compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
-            }
-        }
-
-        if (!scheduled) {
-            if (cfg_.backpressure == BackpressureMode::FailFast) {
-                {
-                    std::lock_guard<std::mutex> lk(inflight->mu);
-                    inflight->done = true;
-                    inflight->ok = false;
-                    inflight->error = "compute queue full (fail fast)";
+            // Keep an owned task until acceptance; a rejected by-value argument
+            // otherwise consumes the callable needed for the inline fallback.
+            if (!compute_pool_ || !compute_pool_->try_submit(work)) {
+                if (compute_pool_) {
+                    compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
+                    if (cfg_.backpressure == BackpressureMode::FailFast) {
+                        finish_compute(idx, key, inflight, {}, false);
+                        return {};
+                    }
                 }
-                inflight->cv.notify_all();
-
-                std::lock_guard<std::mutex> g(s.inflight_mu);
-                s.inflight.erase(key);
-
-                return "";
+                work(std::stop_token{});
             }
-
-            // RunInline fallback
-            run_compute_and_publish(idx, std::string(key), inflight, std::move(fn_copy), /*is_refresh=*/false);
+        } catch (...) {
+            // Copying/allocating the queued task can fail after installing a
+            // flight; retire it and release all callers just like compute errors.
+            finish_compute(idx, key, inflight, {}, false);
         }
     }
 
@@ -379,6 +383,9 @@ void ShardedEngine::trigger_refresh(
     const std::string& key,
     std::function<std::pair<std::string, PutOptions>()> compute_fn
 ) {
+    ComputeCall call(*this);
+    if (!call) return;
+
     const size_t idx = shard_index(key);
     Shard& s = shards_[idx];
 
@@ -403,31 +410,26 @@ void ShardedEngine::trigger_refresh(
 
     refresh_scheduled_.fetch_add(1, std::memory_order_relaxed);
 
-    bool scheduled = false;
-    if (compute_pool_) {
-        scheduled = compute_pool_->try_submit(
+    try {
+        dbwaller::concurrency::ThreadPool::Task work =
             [this, idx, k = std::string(key), inflight, fn = std::move(compute_fn)](std::stop_token) mutable {
                 run_compute_and_publish(idx, std::move(k), inflight, std::move(fn), /*is_refresh=*/true);
-            });
+            };
 
-        if (!scheduled) {
-            compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
+        if (!compute_pool_ || !compute_pool_->try_submit(work)) {
+            if (compute_pool_) {
+                compute_queue_rejects_.fetch_add(1, std::memory_order_relaxed);
+                if (cfg_.backpressure == BackpressureMode::FailFast) {
+                    mark_refresh_failure(idx, key);
+                    finish_compute(idx, key, inflight, {}, false);
+                    return;
+                }
+            }
+            work(std::stop_token{});
         }
-    }
-
-    if (!scheduled) {
-        if (cfg_.backpressure == BackpressureMode::FailFast) {
-            // Mark refresh failure but keep the stale entry (if any)
-            mark_refresh_failure(idx, key);
-
-            // Cleanup inflight immediately
-            std::lock_guard<std::mutex> g(s.inflight_mu);
-            s.inflight.erase(key);
-            return;
-        }
-
-        // RunInline fallback
-        run_compute_and_publish(idx, std::string(key), inflight, std::move(compute_fn), /*is_refresh=*/true);
+    } catch (...) {
+        mark_refresh_failure(idx, key);
+        finish_compute(idx, key, inflight, {}, false);
     }
 }
 
@@ -508,8 +510,10 @@ void ShardedEngine::expire_and_evict_locked(Shard& s, uint64_t shard_budget_byte
 
 void ShardedEngine::sweeper_loop(std::stop_token st) {
     const auto sleep_dur = std::chrono::milliseconds(cfg_.sweep_interval_ms);
+    std::unique_lock sleep_lock(sweeper_mu_);
     while (!st.stop_requested()) {
-        std::this_thread::sleep_for(sleep_dur);
+        sweeper_cv_.wait_for(sleep_lock, st, sleep_dur, [] { return false; });
+        if (st.stop_requested()) break;
 
         const uint64_t shard_budget = cfg_.max_bytes_total / shards_.size();
         for (auto& s : shards_) {
@@ -520,19 +524,23 @@ void ShardedEngine::sweeper_loop(std::stop_token st) {
 }
 
 void ShardedEngine::shutdown() {
-    // 1. Stop the Sweeper thread
+    std::lock_guard shutdown_lock(shutdown_mu_);
+    {
+        std::lock_guard lock(lifecycle_mu_);
+        closing_ = true;
+    }
+
     if (sweeper_.joinable()) {
         sweeper_.request_stop();
         sweeper_.join();
     }
 
-    // 2. Stop the Compute Pool (Worker Threads)
-    // This assumes your ThreadPool has a stop/join mechanism.
-    if (compute_pool_) {
-        // You need to implement this in your ThreadPool if it doesn't exist.
-        // It should set a 'stop' flag and join all worker threads.
-        compute_pool_->shutdown(); 
-    }
+    if (compute_pool_) compute_pool_->shutdown();
+
+    // A caller admitted before closure can still be running an inline fallback
+    // or waiting for a shared result. Neither path is represented by pool joins.
+    std::unique_lock lock(lifecycle_mu_);
+    lifecycle_cv_.wait(lock, [&] { return active_calls_ == 0; });
 }
 
 

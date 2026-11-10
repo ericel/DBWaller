@@ -31,6 +31,9 @@ cmake --build build
 or 
 cmake --build build -j
 
+cmake --install /Users/ojobasi/dev/DBWaller/build --prefix /Users/ojobasi/dev/DBWaller/.local/install
+
+
 
 // For benchmark
 cmake -S . -B build-bench -DDBWALLER_BUILD_BENCHMARKS=ON -DDBWALLER_BUILD_APPS=OFF
