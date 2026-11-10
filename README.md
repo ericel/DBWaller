@@ -24,6 +24,8 @@ Most modern apps eventually depend on external cache infrastructure (Redis/Memca
 
 For compute queue backpressure, callback ownership, request timeouts, and graceful
 shutdown, see [Compute lifecycle](docs/compute-lifecycle.md).
+For invalidation during an in-flight fetch and the public load-ticket API for
+external asynchronous fetches, see [Cache invalidation](docs/cache-invalidation.md).
 
 ## Project Structure
 

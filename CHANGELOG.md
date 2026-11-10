@@ -8,6 +8,10 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Fixed
 
+- Fence cache publication from misses and refreshes across key/tag invalidation,
+  including cold keys and absent tag indexes. Keep new single-flights independent
+  of invalidated work and prevent old refresh failures from altering replacement
+  entries. Invalidated waiters receive `LoadInvalidatedError`.
 - Fix release workflow validation by checking optional Artifactory credentials
   inside the upload step instead of referencing secrets in its condition.
 - Preserve miss and refresh callbacks when a saturated compute queue falls back
@@ -26,6 +30,9 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Added
 
+- Public `begin_load()` / `put_if_current()` API with opaque, engine-bound
+  `LoadTicket` and `PublishStatus` for external asynchronous fetches. Document the
+  conservative engine-wide generation and unconditional `put()` semantics.
 - Deterministic concurrency/lifecycle regressions with CTest watchdogs and a
   documented shutdown and callback-ownership contract.
 - GitHub Actions workflows for pull request, release-tag, and nightly verification.

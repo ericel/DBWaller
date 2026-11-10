@@ -61,11 +61,11 @@ TEST_CASE("saturated compute queue preserves large inline callbacks", "[concurre
         CHECK(calls == 1);
         CHECK(engine.get("fallback") == std::string(4096, 'x'));
         CHECK(engine.stats_snapshot().compute_queue_rejects == 1);
-        engine.invalidate_tag("computed");
-        CHECK_FALSE(engine.get("fallback").has_value());
         gate.release.set();
         engine.shutdown();
         CHECK(engine.get("queued") == "queued");
+        engine.invalidate_tag("computed");
+        CHECK_FALSE(engine.get("fallback").has_value());
     }
 }
 

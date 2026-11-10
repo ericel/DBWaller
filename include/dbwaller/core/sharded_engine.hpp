@@ -4,19 +4,47 @@
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <stop_token>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "dbwaller/concurrency/thread_pool.hpp"
 #include "dbwaller/observability/observer.hpp"
 
 namespace dbwaller::core {
+
+enum class PublishStatus { Stored, Invalidated };
+
+// Copyable, opaque capability for one key and one engine invalidation generation.
+// Capture before fetching; it does not keep the engine itself alive.
+class LoadTicket {
+public:
+    LoadTicket(const LoadTicket&) = default;
+    LoadTicket(LoadTicket&&) noexcept = default;
+    LoadTicket& operator=(const LoadTicket&) = default;
+    LoadTicket& operator=(LoadTicket&&) noexcept = default;
+
+private:
+    friend class ShardedEngine;
+    struct Generation {};
+    LoadTicket(std::string key, std::shared_ptr<const Generation> generation)
+        : key_(std::move(key)), generation_(std::move(generation)) {}
+    std::string key_;
+    std::shared_ptr<const Generation> generation_;
+};
+
+class LoadInvalidatedError : public std::runtime_error {
+public:
+    LoadInvalidatedError() : std::runtime_error("cache load invalidated") {}
+};
 
 struct PutOptions {
     uint64_t ttl_ms = 1000;
@@ -87,21 +115,28 @@ public:
     // SWR-aware get
     GetResult get_swr(const std::string& key);
 
-    // Put value with TTL/SWR metadata
+    // Unconditional deliberate write; does not fence pending loads. For fetched
+    // values use begin_load before fetching and put_if_current after fetching.
     void put(const std::string& key, std::string encrypted_value, const PutOptions& opt);
 
-    // Invalidation
+    LoadTicket begin_load(const std::string& key);
+    PublishStatus put_if_current(const LoadTicket& ticket, std::string encrypted_value,
+                                 const PutOptions& opt);
+
+    // Every invalidation fences all earlier loads, even if nothing is cached.
     void invalidate_key(const std::string& key);
     void invalidate_tag(const std::string& tag);
 
-    // Miss path: single-flight + governance
+    // Miss path: single-flight per generation + governance. Throws
+    // LoadInvalidatedError if invalidation supersedes the shared computation.
     std::string get_or_compute(
         const std::string& key,
         const std::function<std::pair<std::string, PutOptions>()>& compute_fn
     );
 
     // Stale path: schedule refresh. RunInline/pool-disabled execution may block.
-    // If already inflight or shutdown has started, do nothing.
+    // If already inflight in the current generation or shutdown has started,
+    // do nothing. Invalidated background results are discarded.
     void trigger_refresh(
         const std::string& key,
         std::function<std::pair<std::string, PutOptions>()> compute_fn
@@ -137,7 +172,10 @@ private:
         bool admitted_ = false;
     };
 
+    struct EntryVersion {};
+
     struct CacheEntry {
+        std::shared_ptr<const EntryVersion> version = std::make_shared<const EntryVersion>();
         std::string encrypted_value;
         uint32_t size_bytes = 0;
 
@@ -160,12 +198,15 @@ private:
     };
 
     struct Inflight {
+        explicit Inflight(LoadTicket load) : ticket(std::move(load)) {}
+        const LoadTicket ticket;
+        std::shared_ptr<const EntryVersion> refresh_entry;
         std::mutex mu;
         std::condition_variable cv;
         bool done = false;
         bool ok = false;
+        bool invalidated = false;
         std::string value;
-        std::string error;
     };
 
     struct Shard {
@@ -183,6 +224,9 @@ private:
 
     size_t shard_index(const std::string& key) const;
 
+    // Caller holds publication_mu_; acquires only the target shard's lock.
+    void put_locked(const std::string& key, std::string encrypted_value, const PutOptions& opt);
+
     void remove_entry_locked(Shard& s, const std::string& key);
     void expire_and_evict_locked(Shard& s, uint64_t shard_budget_bytes);
     void sweeper_loop(std::stop_token st);
@@ -196,7 +240,8 @@ private:
         bool is_refresh
     );
 
-    void mark_refresh_failure(size_t shard_idx, const std::string& key);
+    void mark_refresh_failure(size_t shard_idx, const std::string& key,
+                              const std::shared_ptr<Inflight>& inflight);
 
     void finish_compute(size_t shard_idx, const std::string& key,
                         const std::shared_ptr<Inflight>& inflight,
@@ -207,6 +252,13 @@ private:
 private:
     Config cfg_;
     std::vector<Shard> shards_;
+
+    // Lock order: publication -> shard/inflight map -> individual flight.
+    // Never held across callbacks, scheduling, or waits. Shared generation
+    // identities cannot wrap or be reused while an old ticket still exists.
+    std::mutex publication_mu_;
+    std::shared_ptr<const LoadTicket::Generation> generation_ =
+        std::make_shared<const LoadTicket::Generation>();
 
     std::mutex shutdown_mu_;
     std::mutex lifecycle_mu_;
