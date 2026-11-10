@@ -57,6 +57,14 @@ Only set these if you want `release.yml` to publish built packages to Artifactor
   - `ARTIFACTORY_USERNAME`
   - `ARTIFACTORY_PASSWORD`
 
+The upload step checks the repository variables in its GitHub Actions condition
+and checks credentials inside its shell script. GitHub does not permit the
+`secrets` context directly in an `if:` condition. Credentials stay scoped to the
+upload step; missing credentials skip the upload successfully.
+
+When editing workflows, run `actionlint` from the repository root to validate all
+workflow files, including release workflows that do not run on pull requests.
+
 ## Release Environment Gate
 
 - The `publish` job in `.github/workflows/release.yml` uses the `release` environment.
