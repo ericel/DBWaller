@@ -15,6 +15,8 @@ include(GNUInstallDirs)
 option(DBWALLER_BUILD_APPS "Build DBWaller apps" ${PROJECT_IS_TOP_LEVEL})
 option(DBWALLER_BUILD_TESTS "Build DBWaller tests" OFF)
 option(DBWALLER_BUILD_BENCHMARKS "Build DBWaller benchmarks" OFF)
+option(DBWALLER_BUILD_SERVICE "Build the transport-independent daemon service (no listener)" OFF)
+option(DBWALLER_BUILD_DAEMON "Build the optional gRPC daemon" OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +63,10 @@ target_link_libraries(dbwaller
         $<LINK_ONLY:nlohmann_json::nlohmann_json>
         $<LINK_ONLY:${DBWALLER_SPDLOG_TARGET}>
 )
+
+if(DBWALLER_BUILD_SERVICE OR DBWALLER_BUILD_TESTS OR DBWALLER_BUILD_DAEMON)
+    add_subdirectory(apps/dbwaller_daemon)
+endif()
 
 if(DBWALLER_BUILD_APPS)
     add_subdirectory(apps)

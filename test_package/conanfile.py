@@ -36,3 +36,7 @@ class DBWallerTestPackageConan(ConanFile):
             executable += ".exe"
 
         self.run(executable, env="conanrun")
+        dependency = self.dependencies["dbwaller"]
+        if dependency.options.get_safe("with_daemon", False):
+            daemon = os.path.join(dependency.package_folder, "bin", "dbwallerd")
+            self.run(f'"{daemon}" --help', env="conanrun")

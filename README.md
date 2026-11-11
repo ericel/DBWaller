@@ -9,7 +9,7 @@ It is designed for cost-aware, cloud-native deployments (e.g., ephemeral instanc
 Most modern apps eventually depend on external cache infrastructure (Redis/Memcached) to reduce latency and backend load. DBWaller explores a different route: a reusable, high-performance **data-plane layer** that can run:
 
 - **Embedded** inside your service (max locality, lowest overhead)
-- **As a daemon** (Redis-like boundary for multi-client use)
+- **As an optional daemon** (experimental gRPC boundary for multi-client use)
 - **(Planned)** as a shared-memory multi-process variant (isolation + locality)
 
 ## Core Capabilities
@@ -26,6 +26,13 @@ For compute queue backpressure, callback ownership, request timeouts, and gracef
 shutdown, see [Compute lifecycle](docs/compute-lifecycle.md).
 For invalidation during an in-flight fetch and the public load-ticket API for
 external asynchronous fetches, see [Cache invalidation](docs/cache-invalidation.md).
+For the proposed standalone service, installable public C++ SDK, Google Cloud
+deployment kit, and later Python and Node.js clients, see the
+[Daemon bridge implementation plan](docs/daemon-bridge-plan.md).
+The experimental `dbwallerd` implements the versioned gRPC protocol with TLS,
+namespace authorization, bounded admission, and graceful shutdown. See
+[Run the daemon](docs/daemon.md) and [Bridge service contract](docs/bridge-service.md).
+The installable public C++ remote SDK remains the next stage.
 
 ## Project Structure
 
@@ -33,7 +40,8 @@ external asynchronous fetches, see [Cache invalidation](docs/cache-invalidation.
 - `src/` — implementations
 - `cmake/` — package configuration templates
 - `apps/embedded_demo` — minimal embedded example
-- `apps/dbwaller_daemon` — standalone service (planned)
+- `apps/dbwaller_daemon` — optional gRPC daemon and service foundation
+- `proto/dbwaller/v1` — experimental protocol and shared conformance scenarios
 - `apps/benchmark_harness` — load + latency evaluation harness (planned)
 - `tests/` and `benchmarks/` — correctness + performance suites
 - `test_package/` — Conan consumer verification
