@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package dbwaller.v1;
+
+// Experimental v1 contract served by the optional dbwallerd gRPC listener.
+// Authenticate the caller and authorize every namespace before invoking service
+// code. Principal identity comes from credentials, never from a request field.
+service Cache {
+  rpc Lookup(LookupRequest) returns (LookupResponse);
+  rpc BeginLoad(BeginLoadRequest) returns (LoadGrant);
+  rpc Publish(PublishRequest) returns (PublishResponse);
+  rpc InvalidateKey(InvalidateKeyRequest) returns (InvalidationResponse);
+  rpc InvalidateTag(InvalidateTagRequest) returns (InvalidationResponse);
+  // Operator-authorized; these responses contain aggregate data only.
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Stats(StatsRequest) returns (StatsResponse);
+}
+
+message LookupRequest {
+  bytes cache_namespace = 1;
+  bytes key = 2;
+  bool acquire_ticket = 3; // Snapshot and ticket share an invalidation boundary.
+}
+enum LookupKind {
+  LOOKUP_KIND_UNSPECIFIED = 0;
+  LOOKUP_KIND_MISS = 1;
+  LOOKUP_KIND_FRESH = 2;
+  LOOKUP_KIND_STALE = 3;
+}
+message LookupResponse {
+  LookupKind kind = 1;
+  bytes value = 2; // Empty values are valid; inspect kind to distinguish a miss.
+  uint64 fresh_remaining_ms = 3;
+  uint64 servable_remaining_ms = 4; // Includes remaining freshness + allowed SWR.
+  LoadGrant load = 5; // Present only when requested; issued for hits and misses.
+}
+message BeginLoadRequest {
+  bytes cache_namespace = 1;
+  bytes key = 2;
+}
+message LoadGrant {
+  bytes ticket = 1; // Opaque, principal/namespace/instance-bound, single use.
+  uint64 valid_for_ms = 2; // Hint at admission; network delay consumes this budget.
+}
+message PublishOptions {
+  uint64 ttl_ms = 1; // Relative to publication; zero allows immediate staleness.
+  uint64 swr_ms = 2;
+  repeated bytes tags = 3;
+}
+message PublishRequest {
+  bytes cache_namespace = 1;
+  bytes ticket = 2;
+  bytes value = 3;
+  PublishOptions options = 4; // Required by the service contract (validate presence).
+}
+enum Publication {
+  PUBLICATION_UNSPECIFIED = 0;
+  PUBLICATION_STORED = 1;
+  PUBLICATION_INVALIDATED = 2;
+  PUBLICATION_EXPIRED = 3;
+  PUBLICATION_CONSUMED = 4;
+  PUBLICATION_UNKNOWN_TICKET = 5; // Includes reaped tickets and other instances.
+}
+message PublishResponse { Publication outcome = 1; }
+message InvalidateKeyRequest {
+  bytes cache_namespace = 1;
+  bytes key = 2;
+}
+message InvalidateTagRequest {
+  bytes cache_namespace = 1;
+  bytes tag = 2;
+}
+message InvalidationResponse {} // Success means invalidation has completed.
+message HealthRequest {}
+message HealthResponse {
+  bool ready = 1;
+  string protocol_version = 2;
+  string build_version = 3;
+  bytes instance_id = 4; // Changes on every service construction; not a ticket.
+}
+message StatsRequest {}
+message StatsResponse {
+  uint64 ticket_records = 1;
+  uint64 ticket_key_bytes = 2;
+  uint64 hits = 3;
+  uint64 stale_hits = 4;
+  uint64 misses = 5;
+  uint64 puts = 6;
+  uint64 evictions = 7;
+  uint64 expirations = 8;
+  uint64 rpc_active = 9;
+  uint64 rpc_accepted = 10;
+  uint64 rpc_rejected = 11;
+  uint64 rpc_cancelled = 12;
+}

@@ -40,6 +40,17 @@ Tickets are not consumed by publication; copies remain valid until invalidation.
 Use a new ticket for each new fetch. Two loads in the same generation have no
 additional ordering guarantee.
 
+If a computation derives its output from a cached snapshot, use
+`auto [snapshot, ticket] = engine.get_snapshot_and_begin_load(key)`. This reads
+the SWR-aware snapshot and captures the ticket under the same publication lock.
+Reading first and calling `begin_load()` afterwards is unsafe: invalidation can
+occur between those calls and attach a new-generation ticket to old input.
+`snapshot.result` has the existing fresh/stale/miss result; `fresh_remaining_ms`
+and `servable_remaining_ms` are relative hints measured at the read. They do not
+reserve freshness during subsequent work. `get_snapshot(key)` returns the same
+metadata without acquiring a ticket. Existing `get()` / `get_swr()` APIs and
+embedded ticket reuse semantics remain unchanged.
+
 ## Misses, refreshes, and waiters
 
 `get_or_compute()` and `trigger_refresh()` capture their tickets when installing a

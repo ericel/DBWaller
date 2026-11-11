@@ -92,29 +92,45 @@ std::optional<std::string> ShardedEngine::get(const std::string& key) {
 }
 
 ShardedEngine::GetResult ShardedEngine::get_swr(const std::string& key) {
+    return get_snapshot(key).result;
+}
+
+std::pair<ShardedEngine::Snapshot, LoadTicket>
+ShardedEngine::get_snapshot_and_begin_load(const std::string& key) {
+    std::lock_guard publication_lock(publication_mu_);
+    return {get_snapshot(key), LoadTicket(key, generation_)};
+}
+
+ShardedEngine::Snapshot ShardedEngine::get_snapshot(const std::string& key) {
     Shard& s = shards_[shard_index(key)];
-    const uint64_t now = now_ms();
 
     {
         std::shared_lock lk(s.mu);
+        const uint64_t now = now_ms();
         auto it = s.entries.find(key);
         if (it == s.entries.end()) {
             misses_.fetch_add(1, std::memory_order_relaxed);
-            return {GetKind::Miss, std::nullopt};
+            return {};
         }
 
         const CacheEntry& e = it->second;
+        uint64_t servable_until = e.swr_until_ms > 0 ? e.swr_until_ms : e.fresh_until_ms;
+        if (e.serve_stale_on_error && e.refresh_attempted && !e.last_refresh_ok &&
+            e.stale_until_ms > servable_until) {
+            servable_until = e.stale_until_ms;
+        }
 
         // Fresh
         if (now < e.fresh_until_ms) {
             hits_.fetch_add(1, std::memory_order_relaxed);
-            return {GetKind::Fresh, e.encrypted_value};
+            return {{GetKind::Fresh, e.encrypted_value}, e.fresh_until_ms - now,
+                    servable_until - now};
         }
 
         // Stale (SWR window)
         if (e.swr_until_ms > 0 && now < e.swr_until_ms) {
             stale_hits_.fetch_add(1, std::memory_order_relaxed);
-            return {GetKind::Stale, e.encrypted_value};
+            return {{GetKind::Stale, e.encrypted_value}, 0, servable_until - now};
         }
 
         // Stale-if-error window (only if refresh attempted & failed)
@@ -123,7 +139,7 @@ ShardedEngine::GetResult ShardedEngine::get_swr(const std::string& key) {
             e.refresh_attempted &&
             !e.last_refresh_ok) {
             stale_hits_.fetch_add(1, std::memory_order_relaxed);
-            return {GetKind::Stale, e.encrypted_value};
+            return {{GetKind::Stale, e.encrypted_value}, 0, servable_until - now};
         }
 
         // Past all allowed windows -> treat as miss (cleanup below)
@@ -144,7 +160,7 @@ ShardedEngine::GetResult ShardedEngine::get_swr(const std::string& key) {
     }
 
     misses_.fetch_add(1, std::memory_order_relaxed);
-    return {GetKind::Miss, std::nullopt};
+    return {};
 }
 
 void ShardedEngine::put(const std::string& key, std::string encrypted_value, const PutOptions& opt) {
@@ -216,6 +232,15 @@ void ShardedEngine::put_locked(const std::string& key, std::string encrypted_val
     puts_.fetch_add(1, std::memory_order_relaxed);
 
     // Best-effort eviction
+    if (cfg_.max_entries_total) {
+        // Daemon mode needs strict value and metadata bounds at publication,
+        // independently of the sweeper (including zero-byte values).
+        const size_t entries = shard_entry_budget(s);
+        while (s.entries.size() > entries || s.bytes > shard_budget) {
+            remove_entry_locked(s, s.entries.begin()->first);
+            evictions_.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
     if (s.bytes > shard_budget) {
         expire_and_evict_locked(s, shard_budget);
     }
@@ -509,6 +534,12 @@ void ShardedEngine::remove_entry_locked(Shard& s, const std::string& key) {
     else s.bytes = 0;
 
     s.entries.erase(it);
+}
+
+size_t ShardedEngine::shard_entry_budget(const Shard& s) const {
+    const size_t index = static_cast<size_t>(&s - shards_.data());
+    return cfg_.max_entries_total / shards_.size() +
+        (index < cfg_.max_entries_total % shards_.size() ? 1 : 0);
 }
 
 void ShardedEngine::expire_and_evict_locked(Shard& s, uint64_t shard_budget_bytes) {

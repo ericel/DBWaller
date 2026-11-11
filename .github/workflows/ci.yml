@@ -15,6 +15,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-daemon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Conan and detect profile
+        run: |
+          python -m pip install conan
+          conan profile detect --force
+      - name: Install optional daemon dependencies
+        run: >
+          conan install . --output-folder=build --build=missing -r conancenter
+          -s build_type=Release -s compiler.cppstd=20
+          -o '&:with_daemon=True' -o '&:with_tests=True'
+          -o '&:with_benchmarks=False' -o '&:build_apps=False'
+          -c tools.build:jobs=2
+      - name: Configure and build daemon
+        run: |
+          cmake --preset conan-release-tests
+          cmake --build --preset build-conan-release-tests -j 2
+      - name: Run Tier B including TLS and process tests
+        run: ctest --preset tier-b-main --no-tests=error
+      - name: Verify daemon package
+        run: >
+          conan create . --build=missing -r conancenter
+          -s build_type=Release -s compiler.cppstd=20
+          -o '&:with_daemon=True' -o '&:with_tests=False'
+          -o '&:build_apps=False' -o '&:with_benchmarks=False'
+          -c tools.build:jobs=2
+
   verify:
     runs-on: ubuntu-latest
 
@@ -34,6 +66,12 @@ jobs:
 
       - name: Detect Conan profile
         run: conan profile detect --force
+
+      - name: Validate experimental bridge protocol
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --proto_path=proto --descriptor_set_out="$RUNNER_TEMP/dbwaller-v1.pb" proto/dbwaller/v1/cache.proto
 
       - name: Install dependencies
         run: >

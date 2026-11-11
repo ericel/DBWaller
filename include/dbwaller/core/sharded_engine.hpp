@@ -95,6 +95,10 @@ public:
         size_t compute_max_queue = 32;
         uint64_t compute_timeout_ms = 1500;
         BackpressureMode backpressure = BackpressureMode::RunInline;
+
+        // Zero preserves the legacy unlimited entry count. A finite limit is
+        // apportioned across shards (unused capacity is not borrowed).
+        size_t max_entries_total = 0;
     };
 
     enum class GetKind { Miss, Fresh, Stale };
@@ -102,6 +106,13 @@ public:
     struct GetResult {
         GetKind kind = GetKind::Miss;
         std::optional<std::string> value;
+    };
+
+    struct Snapshot {
+        GetResult result;
+        // Relative hints at the time of the read, not a freshness guarantee.
+        uint64_t fresh_remaining_ms = 0;
+        uint64_t servable_remaining_ms = 0;
     };
 
     explicit ShardedEngine(Config cfg);
@@ -114,6 +125,11 @@ public:
 
     // SWR-aware get
     GetResult get_swr(const std::string& key);
+
+    Snapshot get_snapshot(const std::string& key);
+    // Linearizes the snapshot and ticket against publication and invalidation.
+    // A ticket acquired separately AFTER a read cannot protect that earlier read.
+    std::pair<Snapshot, LoadTicket> get_snapshot_and_begin_load(const std::string& key);
 
     // Unconditional deliberate write; does not fence pending loads. For fetched
     // values use begin_load before fetching and put_if_current after fetching.
@@ -229,6 +245,7 @@ private:
 
     void remove_entry_locked(Shard& s, const std::string& key);
     void expire_and_evict_locked(Shard& s, uint64_t shard_budget_bytes);
+    size_t shard_entry_budget(const Shard& s) const;
     void sweeper_loop(std::stop_token st);
 
     // Worker helpers

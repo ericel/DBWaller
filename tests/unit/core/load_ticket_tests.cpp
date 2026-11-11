@@ -130,3 +130,65 @@ TEST_CASE("publication and invalidation serialize their complete cache effects",
         CHECK_FALSE(engine.get("post").has_value()); // Valid for either ordering.
     }
 }
+
+TEST_CASE("snapshot tickets cannot certify a read made before invalidation", "[concurrency][invalidation][ticket]") {
+    ShardedEngine engine(config());
+    for (int i = 0; i < 32; ++i) {
+        engine.put("post", "old", options());
+        std::barrier start(2);
+        auto reader = std::async(std::launch::async, [&] {
+            start.arrive_and_wait();
+            return engine.get_snapshot_and_begin_load("post");
+        });
+        start.arrive_and_wait();
+        engine.invalidate_key("post");
+        engine.put("post", "new", options());
+        REQUIRE(ready(reader));
+        auto [snapshot, ticket] = reader.get();
+        const auto result = engine.put_if_current(ticket, "derived", options());
+        if (snapshot.result.value == "old") CHECK(result == PublishStatus::Invalidated);
+        else CHECK(result == PublishStatus::Stored); // Read occurred after the invalidation.
+    }
+    // Also exercise the observed ordering deterministically, without a race.
+    engine.put("post", "before", options());
+    auto [snapshot, ticket] = engine.get_snapshot_and_begin_load("post");
+    REQUIRE(snapshot.result.value == "before");
+    engine.invalidate_tag("post-tag");
+    CHECK(engine.put_if_current(ticket, "derived from before", options()) == PublishStatus::Invalidated);
+}
+
+TEST_CASE("finite entry budgets bound empty values across shards", "[concurrency][capacity]") {
+    const size_t shards = GENERATE(1u, 4u, 16u);
+    auto cfg = config();
+    cfg.num_shards = shards;
+    cfg.max_entries_total = 7;
+    ShardedEngine bounded(cfg);
+    for (int i = 0; i < 100; ++i) bounded.put("key-" + std::to_string(i), "", options());
+    size_t retained = 0;
+    for (int i = 0; i < 100; ++i) retained += bounded.get("key-" + std::to_string(i)).has_value();
+    CHECK(retained <= 7);
+    CHECK(bounded.stats_snapshot().evictions >= 93);
+    cfg.max_entries_total = 0;
+    ShardedEngine unlimited(cfg);
+    for (int i = 0; i < 100; ++i) unlimited.put("key-" + std::to_string(i), "", options());
+    for (int i = 0; i < 100; ++i) CHECK(unlimited.get("key-" + std::to_string(i)).has_value());
+}
+
+TEST_CASE("finite entry mode enforces the byte budget on publication", "[concurrency][capacity]") {
+    auto cfg = config();
+    cfg.num_shards = 1;
+    cfg.max_entries_total = 1000;
+    cfg.max_bytes_total = 8;
+    ShardedEngine engine(cfg);
+    for (int i = 0; i < 10; ++i) engine.put("key-" + std::to_string(i), "1234", options());
+    size_t retained_bytes = 0;
+    for (int i = 0; i < 10; ++i) {
+        if (auto value = engine.get("key-" + std::to_string(i))) retained_bytes += value->size();
+    }
+    CHECK(retained_bytes <= 8);
+    // A successful publication is subject to eviction even when that entry alone
+    // exceeds the budget. It must not leave the shard over budget until a sweep.
+    const auto ticket = engine.begin_load("oversized");
+    REQUIRE(engine.put_if_current(ticket, std::string(9, 'x'), options()) == PublishStatus::Stored);
+    CHECK_FALSE(engine.get("oversized").has_value());
+}

@@ -40,3 +40,14 @@ catch_discover_tests(dbwaller_concurrency_tests
 # Apply the list-valued LABELS property after Catch has discovered the cases.
 set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/concurrency/labels.cmake")
+
+add_executable(dbwaller_service_tests daemon/cache_service_tests.cpp)
+target_link_libraries(dbwaller_service_tests PRIVATE
+    dbwaller_service Catch2::Catch2WithMain nlohmann_json::nlohmann_json)
+target_compile_definitions(dbwaller_service_tests PRIVATE
+    DBWALLER_PROTOCOL_FIXTURES="${PROJECT_SOURCE_DIR}/proto/dbwaller/v1/conformance.json")
+catch_discover_tests(dbwaller_service_tests
+    TEST_PREFIX "service:" TEST_LIST dbwaller_service_cases
+    PROPERTIES TIMEOUT 45)
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/daemon/labels.cmake")

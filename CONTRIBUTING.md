@@ -25,6 +25,20 @@ ctest --preset tier-a-pr
 
 ## Package Validation
 
+The daemon service tests are included in Tier A/B without a network listener or
+additional runtime dependencies. For protocol changes, install `protoc` separately
+and validate the experimental schema (CI runs this check):
+
+```bash
+protoc --proto_path=proto --descriptor_set_out=build/dbwaller-v1.pb proto/dbwaller/v1/cache.proto
+```
+
+See [Bridge service contract](docs/bridge-service.md) for targeted facade tests.
+[Run the daemon](docs/daemon.md) covers the opt-in listener build and actual socket
+tests. The public remote SDK remains planned. Daemon changes must pass the optional
+build with `with_daemon=True`, Tier B, and the `daemon` CTest label. Verify both
+embedded and daemon Conan package variants when changing their build/install rules.
+
 If you touch public headers, dependency wiring, install rules, or packaging, run:
 
 ```bash

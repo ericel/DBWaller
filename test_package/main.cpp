@@ -39,5 +39,11 @@ int main() {
     }
     engine.shutdown();
 
+    const auto [snapshot, snapshot_ticket] = engine.get_snapshot_and_begin_load("post:42");
+    if (snapshot.result.value != "new-value" || snapshot.fresh_remaining_ms == 0) return 1;
+    engine.invalidate_key("post:42");
+    if (engine.put_if_current(snapshot_ticket, "derived", options) != dbwaller::core::PublishStatus::Invalidated)
+        return 1;
+
     return cached && *cached == "cached-value" ? 0 : 1;
 }

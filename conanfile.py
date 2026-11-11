@@ -1,7 +1,8 @@
 import os
 
 from conan import ConanFile
-from conan.tools.build import check_min_cppstd
+from conan.errors import ConanInvalidConfiguration
+from conan.tools.build import check_min_cppstd, cross_building
 from conan.tools.cmake import CMake, CMakeDeps, CMakeToolchain, cmake_layout
 from conan.tools.files import copy, load
 
@@ -20,6 +21,7 @@ class DBWallerConan(ConanFile):
         "with_tests": [True, False],
         "with_benchmarks": [True, False],
         "build_apps": [True, False],
+        "with_daemon": [True, False],
     }
     default_options = {
         "shared": False,
@@ -27,7 +29,14 @@ class DBWallerConan(ConanFile):
         "with_tests": False,
         "with_benchmarks": False,
         "build_apps": False,
+        "with_daemon": False,
         "spdlog/*:header_only": False,
+        "grpc/*:csharp_plugin": False,
+        "grpc/*:node_plugin": False,
+        "grpc/*:objective_c_plugin": False,
+        "grpc/*:php_plugin": False,
+        "grpc/*:python_plugin": False,
+        "grpc/*:ruby_plugin": False,
     }
 
     def config_options(self):
@@ -40,6 +49,10 @@ class DBWallerConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, "20")
+        if self.options.with_daemon and str(self.settings.os) not in ("Linux", "Macos"):
+            raise ConanInvalidConfiguration("The daemon currently supports Linux and macOS")
+        if self.options.with_daemon and cross_building(self):
+            raise ConanInvalidConfiguration("The daemon currently requires a native build for its code generators")
 
     def set_version(self):
         self.version = load(self, os.path.join(self.recipe_folder, "VERSION")).strip()
@@ -57,7 +70,7 @@ class DBWallerConan(ConanFile):
         for filename in files_to_copy:
             copy(self, filename, self.recipe_folder, self.export_sources_folder)
 
-        for directory in ("apps", "benchmarks", "cmake", "include", "src", "tests"):
+        for directory in ("apps", "benchmarks", "cmake", "docs", "include", "proto", "scripts", "src", "tests"):
             copy(
                 self,
                 "*",
@@ -69,6 +82,8 @@ class DBWallerConan(ConanFile):
         self.requires("spdlog/1.15.3")
         self.requires("openssl/3.5.6")
         self.requires("nlohmann_json/3.12.0")
+        if self.options.with_daemon:
+            self.requires("grpc/1.84.0")
 
         if self.options.with_tests:
             self.requires("catch2/3.7.1")
@@ -95,6 +110,14 @@ class DBWallerConan(ConanFile):
         toolchain.variables["DBWALLER_BUILD_APPS"] = bool(self.options.build_apps)
         toolchain.variables["DBWALLER_BUILD_TESTS"] = bool(self.options.with_tests)
         toolchain.variables["DBWALLER_BUILD_BENCHMARKS"] = bool(self.options.with_benchmarks)
+        toolchain.variables["DBWALLER_BUILD_DAEMON"] = bool(self.options.with_daemon)
+        if self.options.with_daemon:
+            # ConanCenter's imported executable targets otherwise search PATH,
+            # which can pick up a system generator incompatible with this graph.
+            toolchain.variables["Protobuf_PROTOC_EXECUTABLE"] = os.path.join(
+                self.dependencies["protobuf"].package_folder, "bin", "protoc")
+            toolchain.variables["GRPC_CPP_PLUGIN_PROGRAM"] = os.path.join(
+                self.dependencies["grpc"].package_folder, "bin", "grpc_cpp_plugin")
         toolchain.generate()
 
     def build(self):
@@ -105,6 +128,11 @@ class DBWallerConan(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
+        if self.options.with_daemon:
+            for dependency in self.dependencies.host.values():
+                if dependency.package_folder:
+                    copy(self, "*", os.path.join(dependency.package_folder, "licenses"),
+                         os.path.join(self.package_folder, "licenses", "dependencies", dependency.ref.name))
 
     def package_info(self):
         self.cpp_info.set_property("cmake_file_name", "DBWaller")

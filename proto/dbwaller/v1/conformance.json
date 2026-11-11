@@ -1,0 +1,56 @@
+{
+  "protocol": "dbwaller.v1",
+  "ticket_lifetime_ms": 100,
+  "scenarios": [
+    {
+      "name": "cold key invalidation fences the old load",
+      "steps": [
+        {"op": "begin", "key": "post", "as": "old"},
+        {"op": "invalidate_key", "key": "post"},
+        {"op": "begin", "key": "post", "as": "new"},
+        {"op": "publish", "ticket": "new", "value": "v2", "expect": "stored"},
+        {"op": "publish", "ticket": "old", "value": "v1", "expect": "invalidated"},
+        {"op": "lookup", "key": "post", "kind": "fresh", "value": "v2"}
+      ]
+    },
+    {
+      "name": "absent tag invalidation rejects late tagging",
+      "steps": [
+        {"op": "begin", "key": "post", "as": "old"},
+        {"op": "invalidate_tag", "tag": "posts"},
+        {"op": "publish", "ticket": "old", "value": "v1", "tags": ["posts"], "expect": "invalidated"},
+        {"op": "lookup", "key": "post", "kind": "miss"}
+      ]
+    },
+    {
+      "name": "publication is single use even after invalidation",
+      "steps": [
+        {"op": "begin", "key": "post", "as": "load"},
+        {"op": "publish", "ticket": "load", "value": "v1", "expect": "stored"},
+        {"op": "invalidate_key", "key": "post"},
+        {"op": "publish", "ticket": "load", "value": "v1", "expect": "consumed"},
+        {"op": "lookup", "key": "post", "kind": "miss"}
+      ]
+    },
+    {
+      "name": "expiration includes the deadline itself",
+      "steps": [
+        {"op": "begin", "key": "post", "as": "load"},
+        {"op": "advance", "ms": 100},
+        {"op": "publish", "ticket": "load", "value": "v1", "expect": "expired"},
+        {"op": "lookup", "key": "post", "kind": "miss"}
+      ]
+    },
+    {
+      "name": "restart is cold and rejects previous tickets",
+      "steps": [
+        {"op": "begin", "key": "post", "as": "stored"},
+        {"op": "publish", "ticket": "stored", "value": "v1", "expect": "stored"},
+        {"op": "begin", "key": "post", "as": "old"},
+        {"op": "restart"},
+        {"op": "publish", "ticket": "old", "value": "v1", "expect": "unknown_ticket"},
+        {"op": "lookup", "key": "post", "kind": "miss"}
+      ]
+    }
+  ]
+}
