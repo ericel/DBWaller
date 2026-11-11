@@ -26,8 +26,11 @@ ctest --preset tier-a-pr
 ## Package Validation
 
 The daemon service tests are included in Tier A/B without a network listener or
-additional runtime dependencies. For protocol changes, install `protoc` separately
-and validate the experimental schema (CI runs this check):
+additional runtime dependencies. CI validates the experimental schema in
+`verify-daemon` when building the generated wire code with Conan's matching
+Protobuf compiler/runtime. The embedded `verify` job requires no system Protobuf
+installation or APT step. For a standalone local schema check, use an installed
+`protoc`:
 
 ```bash
 protoc --proto_path=proto --descriptor_set_out=build/dbwaller-v1.pb proto/dbwaller/v1/cache.proto

@@ -8,6 +8,9 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Fixed
 
+- Remove the redundant APT Protobuf installation from embedded CI, avoiding a
+  separate Ubuntu mirror dependency. Schema validation remains in the daemon
+  build through Conan's matching Protobuf compiler/runtime.
 - Fence cache publication from misses and refreshes across key/tag invalidation,
   including cold keys and absent tag indexes. Keep new single-flights independent
   of invalidated work and prevent old refresh failures from altering replacement
