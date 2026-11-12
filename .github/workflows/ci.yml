@@ -33,7 +33,9 @@ jobs:
           -o '&:with_daemon=True' -o '&:with_tests=True'
           -o '&:with_benchmarks=False' -o '&:build_apps=False'
           -c tools.build:jobs=2
-      - name: Configure and build daemon
+      # Building dbwaller_wire validates the schema with Conan's matching
+      # protoc/runtime. The embedded job needs no system Protobuf installation.
+      - name: Validate protocol and build daemon
         run: |
           cmake --preset conan-release-tests
           cmake --build --preset build-conan-release-tests -j 2
@@ -66,12 +68,6 @@ jobs:
 
       - name: Detect Conan profile
         run: conan profile detect --force
-
-      - name: Validate experimental bridge protocol
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-          protoc --proto_path=proto --descriptor_set_out="$RUNNER_TEMP/dbwaller-v1.pb" proto/dbwaller/v1/cache.proto
 
       - name: Install dependencies
         run: >
