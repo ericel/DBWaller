@@ -35,6 +35,8 @@ namespace authorization, bounded admission, and graceful shutdown. See
 The separately installable [C++ remote SDK](docs/remote-cpp.md) provides asynchronous
 requests, deadlines, cancellation, and an application executor hook. Its generic
 example demonstrates disabled, embedded, and remote modes with backend fallback.
+Remote applications must follow the documented explicit TLS startup policy before
+other OpenSSL use; the supplied daemon and examples apply it at process startup.
 
 ## Project Structure
 

@@ -8,6 +8,13 @@ example are available from source. There is no Redis/RESP compatibility,
 persistence, replication, or Google Cloud installer yet. Applications keep their durable data
 and perform backend fetches themselves.
 
+The daemon selects OpenSSL's process-lifetime cleanup policy before configuration
+validation or worker creation. This prevents global crypto cleanup racing gRPC
+worker teardown at process exit. OpenSSL global allocations are reclaimed with
+the process; cache entries, requests, and client-owned resources still retire
+normally. Applications using the SDK must follow its explicit
+[TLS startup contract](remote-cpp.md#process-wide-tls-startup-contract).
+
 ## Build and install
 
 Supported daemon source platforms are Linux and macOS. Start with a Conan 2
@@ -224,6 +231,6 @@ Local validation on macOS/AppleClang 21 (2026-11-11):
   `actionlint`. Linux CI and cloud deployment have not been run locally.
 
 The [separately installable asynchronous C++ client](remote-cpp.md) includes current
-validation results and a dependency process-exit TSan finding from its expanded
-tests. Python, Node.js, GCS snapshots, containers, and the Google Cloud installer remain later
+validation results and the explicit startup mitigation for the dependency
+process-exit TSan finding. Python, Node.js, GCS snapshots, containers, and the Google Cloud installer remain later
 work. This daemon remains a disposable cache with application-owned backend fallback.

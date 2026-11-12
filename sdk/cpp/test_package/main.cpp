@@ -2,6 +2,7 @@
 // The consumer never includes generated gRPC headers or the embedded library.
 int main() {
     namespace r = dbwaller::remote;
+    r::initialize_process_tls();
     r::ClientOptions options;
     options.endpoint = "127.0.0.1:1"; options.cache_namespace = "consumer";
     options.bearer_token = std::string(64, 'x'); options.insecure_loopback = true;

@@ -35,7 +35,7 @@ if(DBWALLER_BUILD_DAEMON)
     target_compile_options(dbwaller_rpc PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>)
     add_executable(dbwallerd src/main.cpp)
-    target_link_libraries(dbwallerd PRIVATE dbwaller_rpc)
+    target_link_libraries(dbwallerd PRIVATE dbwaller_rpc OpenSSL::SSL)
     install(TARGETS dbwallerd RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES "${proto_file}" DESTINATION ${CMAKE_INSTALL_DATADIR}/DBWaller/proto/dbwaller/v1)
     install(FILES "${PROJECT_SOURCE_DIR}/docs/daemon.md"

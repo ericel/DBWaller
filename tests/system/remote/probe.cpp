@@ -12,6 +12,7 @@ std::string read(const char* path) {
 }
 int main(int argc, char** argv) {
     try {
+        r::initialize_process_tls();
         if (argc != 5) return 2;
         r::ClientOptions o; o.endpoint = argv[1]; o.root_certificates = read(argv[2]);
         o.bearer_token = read(argv[3]); o.cache_namespace = "public"; o.timeout = std::chrono::seconds(5);

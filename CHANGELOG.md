@@ -8,6 +8,10 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Fixed
 
+- Select the explicit process-lifetime OpenSSL policy before daemon credential
+  hashing and thread creation. Add an opt-in C++ SDK startup helper and regression
+  coverage for early versus late initialization, mitigating the gRPC/OpenSSL
+  process-exit race without changing embedded-library initialization.
 - Remove the redundant APT Protobuf installation from embedded CI, avoiding a
   separate Ubuntu mirror dependency. Schema validation remains in the daemon
   build through Conan's matching Protobuf compiler/runtime.

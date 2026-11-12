@@ -69,6 +69,11 @@ print them. The development certificate is for local testing only.
 
 ## Requests and application executors
 
+Call `dbwaller::remote::initialize_process_tls()` at application startup, before
+**any OpenSSL use** (including credential hashing or crypto-using global objects)
+and before starting workers. This selects the process-lifetime cleanup policy
+required by the current gRPC/OpenSSL combination. See the startup contract below.
+
 Reuse a `dbwaller::remote::Client` per endpoint/namespace/credential configuration.
 It owns one completion-queue thread and a reusable channel; gRPC manages its own
 bounded transport resources. Each method returns a copyable `Request<T>` with a
@@ -77,6 +82,7 @@ There is no thread per request and no unbounded SDK admission queue.
 
 ```cpp
 namespace r = dbwaller::remote;
+r::initialize_process_tls(); // At process startup, before any other crypto use.
 r::ClientOptions options;
 options.endpoint = "cache.internal:7447";
 options.cache_namespace = "public-feed";
@@ -119,6 +125,35 @@ and joins the SDK thread; all accepted RPC futures settle before it returns.
 Application executor tasks are separate and may run afterward. Stop external
 callers before destroying the client. Destruction invokes shutdown; threads are
 not detached.
+
+### Process-wide TLS startup contract
+
+The helper calls OpenSSL's supported `OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, ...)`
+before another caller can register automatic global cleanup. gRPC 1.84.0 uses the
+same policy, but its initialization is too late if an application has already used
+OpenSSL. Its internal EventEngine threads may still be retiring after ordinary
+gRPC shutdown; OpenSSL global cleanup can race their thread-local destructors.
+See [gRPC's upstream change](https://github.com/grpc/grpc/pull/42608) and
+[OpenSSL initialization documentation](https://docs.openssl.org/3.5/man3/OPENSSL_init_crypto/).
+
+This is an explicit application startup decision. Client construction does not
+call this helper; relying on gRPC's later TLS initialization is too late when other
+code has already used OpenSSL. The supplied daemon, example, and socket-test
+executables initialize the policy before credential hashing or worker creation.
+The embedded library's initialization and dependencies are unchanged.
+
+Repeated helper calls are safe. A late call **cannot undo** an already registered
+OpenSSL exit handler, and a successful return does not establish that the call
+was early enough. If an earlier global constructor uses crypto, arrange startup
+before it or use an OpenSSL build with its documented `no-atexit` configuration.
+Applications that cannot control this policy remain affected by the upstream
+shutdown limitation; the helper is not a universal repair for every host process.
+
+OpenSSL's global allocations remain until the operating system reclaims the
+process; per-request/client objects still retire normally. Do not call
+`OPENSSL_cleanup()` manually or unload OpenSSL/gRPC while their workers may remain.
+Dynamic unloading of this transport stack is not supported. No sleeps, detached
+SDK threads, or sanitizer suppressions implement this mitigation.
 
 ## Deadlines, limits, and errors
 
@@ -215,20 +250,30 @@ results; see the daemon testing notes.
 
 Local validation on macOS / AppleClang 21 (2026-11-12):
 
-- Native Conan graph: Tier B **50/50**, including all Tier A tests and both new
-  remote CTest entries; the client executable covers **12 test cases**.
-- ASan/UBSan concurrency and remote selection: **43/43**. Networking libraries
+- Native Conan graph after the TLS startup mitigation: Tier B **51/51**, including
+  all Tier A tests and three remote CTest entries. The client executable covers
+  **12 test cases**; `remote_tls_policy` separately verifies real process-exit
+  handlers for early, baseline, and late initialization.
+- ASan/UBSan concurrency, daemon, and remote selection: **45/45**. Networking libraries
   in this build are uninstrumented system libraries, so this is SDK/application
   coverage, not dependency-wide ASan coverage.
 - Static and shared SDK Conan packages passed their downstream consumer checks;
   existing embedded and daemon package variants passed too. The installed example
   passed TLS/invalidation/outage checks via Conan and via relocated native CMake
   exports. The remote-only package does not link the embedded engine.
-- Fully instrumented TSan graph: **42/43** CTest entries passed. The client's
+  These checks were rerun after the mitigation using the existing native dependency
+  graph (including c-ares 1.25.0 and zlib 1.3.1). Initial unlocked package checks
+  selected newer cached dependencies and were stopped during dependency compilation;
+  they did not produce package-validation results.
+- Before the TLS startup mitigation, fully instrumented TSan: **42/43** entries passed. The client's
   **480 assertions / 12 cases passed**, then process exit reported OpenSSL cleanup
   racing gRPC worker teardown. A [gRPC/OpenSSL-only reproducer](../tests/diagnostics/grpc_exit/README.md)
-  reproduced the same report without DBWaller. This check is **not clean**;
-  no suppressions are used. Track it before promoting the experimental client
-  to a production release.
+  reproduced the same report without DBWaller. This original result was **not clean**.
+  After applying the explicit startup policy, the fully instrumented concurrency,
+  daemon, and remote selection passed **45/45** with no suppressions.
+  The reproducer retains that original mode and now also accepts an explicit early
+  initialization mode. Twenty fresh processes in that mode passed under TSan,
+  without suppressions. This mitigates the observed race for applications following
+  the startup contract above; hosts that initialize OpenSSL earlier remain affected.
 - Workflow syntax passed `actionlint`. The new Linux workflow has not been run
   from this local change, and no cloud deployment or registry publication occurred.

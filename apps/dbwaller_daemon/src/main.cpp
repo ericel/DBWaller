@@ -2,6 +2,7 @@
 #include <csignal>
 #include <iostream>
 #include <pthread.h>
+#include <openssl/ssl.h>
 
 int main(int argc, char** argv) {
     if (argc == 2 && std::string_view(argv[1]) == "--help") {
@@ -14,6 +15,10 @@ int main(int argc, char** argv) {
         return 2;
     }
     try {
+        // This executable owns process startup. Configure cleanup before config
+        // validation/hashing or any threads can initialize OpenSSL first.
+        if (OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, nullptr) != 1)
+            throw std::runtime_error("TLS process initialization failed");
         const auto config = dbwaller::daemon::load_server_config(argv[2]);
         if (argc == 4) { std::cout << "configuration valid\n"; return 0; }
         sigset_t signals;

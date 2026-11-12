@@ -18,6 +18,7 @@ if(WIN32)
 endif()
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 find_package(Threads REQUIRED)
 
 set(generated "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -40,7 +41,7 @@ target_compile_features(dbwaller_remote PUBLIC cxx_std_20)
 target_include_directories(dbwaller_remote
     PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     PRIVATE "${generated}")
-target_link_libraries(dbwaller_remote PRIVATE gRPC::grpc++ protobuf::libprotobuf Threads::Threads)
+target_link_libraries(dbwaller_remote PRIVATE gRPC::grpc++ protobuf::libprotobuf OpenSSL::SSL Threads::Threads)
 if(TARGET dbwaller_wire)
     # In-process integration tests share the daemon's generated definitions.
     target_link_libraries(dbwaller_remote PRIVATE dbwaller_wire)

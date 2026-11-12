@@ -46,6 +46,9 @@ run Tier B including the `remote` label, and run `conan create sdk/cpp` with a
 matching C++20 compiler profile. Verify the installed example over TLS and during
 an outage using `tests/system/remote/installed_example.py`. The root Conan package
 does not install the remote SDK, even when its integration tests are enabled.
+Socket-test executables follow the documented TLS startup policy. The
+`remote_tls_policy` subprocess regression retains baseline and too-late cases;
+do not remove those checks or suppress TSan reports to make a run pass.
 
 If you touch public headers, dependency wiring, install rules, or packaging, run:
 
