@@ -3,8 +3,9 @@
 `dbwallerd` is an optional C++20 gRPC server for one shared in-memory cache. The
 embedded library remains the default. The daemon implements `dbwaller.v1`, TLS,
 namespace authorization, bounded admission, aggregate statistics, and graceful
-shutdown. There is no public remote SDK, Redis/RESP compatibility, persistence,
-replication, or Google Cloud installer yet. Applications keep their durable data
+shutdown. A separately installable [C++ remote SDK](remote-cpp.md) and generic
+example are available from source. There is no Redis/RESP compatibility,
+persistence, replication, or Google Cloud installer yet. Applications keep their durable data
 and perform backend fetches themselves.
 
 ## Build and install
@@ -222,6 +223,7 @@ Local validation on macOS/AppleClang 21 (2026-11-11):
   the daemon package also ran its installed executable. Workflow syntax passed
   `actionlint`. Linux CI and cloud deployment have not been run locally.
 
-The next deliverable is a separately installable asynchronous C++ client. Python,
-Node.js, GCS snapshots, containers, and the Google Cloud installer remain later
+The [separately installable asynchronous C++ client](remote-cpp.md) includes current
+validation results and a dependency process-exit TSan finding from its expanded
+tests. Python, Node.js, GCS snapshots, containers, and the Google Cloud installer remain later
 work. This daemon remains a disposable cache with application-owned backend fallback.

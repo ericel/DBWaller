@@ -38,9 +38,14 @@ protoc --proto_path=proto --descriptor_set_out=build/dbwaller-v1.pb proto/dbwall
 
 See [Bridge service contract](docs/bridge-service.md) for targeted facade tests.
 [Run the daemon](docs/daemon.md) covers the opt-in listener build and actual socket
-tests. The public remote SDK remains planned. Daemon changes must pass the optional
+tests. The [C++ remote SDK](docs/remote-cpp.md) is packaged separately. Daemon changes must pass the optional
 build with `with_daemon=True`, Tier B, and the `daemon` CTest label. Verify both
 embedded and daemon Conan package variants when changing their build/install rules.
+For client changes, enable `with_remote_tests=True` alongside the daemon/tests,
+run Tier B including the `remote` label, and run `conan create sdk/cpp` with a
+matching C++20 compiler profile. Verify the installed example over TLS and during
+an outage using `tests/system/remote/installed_example.py`. The root Conan package
+does not install the remote SDK, even when its integration tests are enabled.
 
 If you touch public headers, dependency wiring, install rules, or packaging, run:
 

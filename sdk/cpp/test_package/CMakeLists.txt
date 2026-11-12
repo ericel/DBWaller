@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20)
+project(UnrelatedConsumer LANGUAGES CXX)
+find_package(DBWallerRemote CONFIG REQUIRED)
+if(TARGET DBWaller::dbwaller OR TARGET dbwaller_service)
+    message(FATAL_ERROR "The remote package must not pull in the embedded engine or daemon")
+endif()
+add_executable(remote_consumer main.cpp)
+target_link_libraries(remote_consumer PRIVATE DBWallerRemote::client)

@@ -57,7 +57,7 @@ def process(directory, server, probe):
                 if child.poll() is None:
                     child.kill()
                     child.wait(timeout=5)
-    print("TLS process test passed: separate clients, SIGTERM, cold restart, old-ticket rejection")
+    print("TLS process test passed: separate clients, SIGTERM, cold restart")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,9 @@
 /Testing/
 /test_package/build/
 /test_package/CMakeUserPresets.json
+/sdk/cpp/test_package/build/
+/sdk/cpp/test_package/CMakeUserPresets.json
+/examples/remote_cpp/CMakeUserPresets.json
 __pycache__/
 
 .local/

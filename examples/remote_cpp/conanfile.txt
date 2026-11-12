@@ -1,0 +1,9 @@
+[requires]
+dbwaller-remote/0.1.0
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

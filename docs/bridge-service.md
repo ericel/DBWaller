@@ -3,8 +3,9 @@
 Status: experimental v1 protocol and transport-independent C++ service, 2026-11-11.
 The service is now used by the optional `dbwallerd` gRPC listener, with credential
 validation, transport limits, and TLS. See [Run the daemon](daemon.md). The facade
-tests remain independent of sockets and backends. Public remote SDK packaging and
-the deployment installer remain later stages in the [implementation plan](daemon-bridge-plan.md).
+tests remain independent of sockets and backends. The separate [C++ remote SDK](remote-cpp.md)
+provides an installable client; the deployment installer remains a later stage in
+the [implementation plan](daemon-bridge-plan.md).
 
 ## Build boundary
 
@@ -91,7 +92,7 @@ original expiry, within the same record limit. There is no unbounded receipt log
 Once reaped, a record yields UnknownTicket; exact historical outcomes are not
 promised forever. UnknownTicket is always a refusal to publish.
 
-The future client must not automatically retry publication. A lost reply or
+Clients must not automatically retry publication. A lost reply or
 transport deadline leaves the outcome unknown; it does not prove that the write
 was undone. Never respond to Consumed/UnknownTicket by performing an unconditional
 write or obtaining another ticket for the same old result.

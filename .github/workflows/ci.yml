@@ -30,7 +30,7 @@ jobs:
         run: >
           conan install . --output-folder=build --build=missing -r conancenter
           -s build_type=Release -s compiler.cppstd=20
-          -o '&:with_daemon=True' -o '&:with_tests=True'
+          -o '&:with_daemon=True' -o '&:with_tests=True' -o '&:with_remote_tests=True'
           -o '&:with_benchmarks=False' -o '&:build_apps=False'
           -c tools.build:jobs=2
       # Building dbwaller_wire validates the schema with Conan's matching
@@ -39,7 +39,7 @@ jobs:
         run: |
           cmake --preset conan-release-tests
           cmake --build --preset build-conan-release-tests -j 2
-      - name: Run Tier B including TLS and process tests
+      - name: Run Tier B including daemon and public client tests
         run: ctest --preset tier-b-main --no-tests=error
       - name: Verify daemon package
         run: >
@@ -48,6 +48,23 @@ jobs:
           -o '&:with_daemon=True' -o '&:with_tests=False'
           -o '&:build_apps=False' -o '&:with_benchmarks=False'
           -c tools.build:jobs=2
+
+      - name: Verify standalone C++ client package
+        run: >
+          conan create sdk/cpp --build=missing -r conancenter
+          -s build_type=Release -s compiler.cppstd=20 -c tools.build:jobs=2
+
+      - name: Build unrelated client example from installed package
+        run: |
+          conan install examples/remote_cpp --output-folder=build/remote-example --build=missing -r conancenter \
+            -s build_type=Release -s compiler.cppstd=20 -c tools.build:jobs=2
+          cmake -S examples/remote_cpp -B build/remote-example/build/Release \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/build/remote-example/build/Release/generators/conan_toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/remote-example/build/Release -j 2
+          python tests/system/remote/installed_example.py \
+            --daemon build/build/Release/apps/dbwaller_daemon/dbwallerd \
+            --example build/remote-example/build/Release/dbwaller_remote_example
 
   verify:
     runs-on: ubuntu-latest
