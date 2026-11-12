@@ -26,13 +26,15 @@ For compute queue backpressure, callback ownership, request timeouts, and gracef
 shutdown, see [Compute lifecycle](docs/compute-lifecycle.md).
 For invalidation during an in-flight fetch and the public load-ticket API for
 external asynchronous fetches, see [Cache invalidation](docs/cache-invalidation.md).
-For the proposed standalone service, installable public C++ SDK, Google Cloud
-deployment kit, and later Python and Node.js clients, see the
+For the service, C++ SDK, planned Google Cloud deployment kit, and later Python
+and Node.js clients, see the
 [Daemon bridge implementation plan](docs/daemon-bridge-plan.md).
 The experimental `dbwallerd` implements the versioned gRPC protocol with TLS,
 namespace authorization, bounded admission, and graceful shutdown. See
 [Run the daemon](docs/daemon.md) and [Bridge service contract](docs/bridge-service.md).
-The installable public C++ remote SDK remains the next stage.
+The separately installable [C++ remote SDK](docs/remote-cpp.md) provides asynchronous
+requests, deadlines, cancellation, and an application executor hook. Its generic
+example demonstrates disabled, embedded, and remote modes with backend fallback.
 
 ## Project Structure
 
@@ -42,6 +44,8 @@ The installable public C++ remote SDK remains the next stage.
 - `apps/embedded_demo` — minimal embedded example
 - `apps/dbwaller_daemon` — optional gRPC daemon and service foundation
 - `proto/dbwaller/v1` — experimental protocol and shared conformance scenarios
+- `sdk/cpp` — independent `dbwaller-remote` Conan/CMake package
+- `examples/remote_cpp` — framework-independent installed-client example
 - `apps/benchmark_harness` — load + latency evaluation harness (planned)
 - `tests/` and `benchmarks/` — correctness + performance suites
 - `test_package/` — Conan consumer verification

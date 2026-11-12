@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.20)
+project(GrpcExitRepro LANGUAGES CXX)
+find_package(gRPC CONFIG REQUIRED)
+find_package(OpenSSL CONFIG REQUIRED)
+add_executable(grpc_exit main.cpp)
+target_link_libraries(grpc_exit PRIVATE gRPC::grpc++ OpenSSL::Crypto)
+target_compile_features(grpc_exit PRIVATE cxx_std_20)

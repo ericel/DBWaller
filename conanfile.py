@@ -22,6 +22,7 @@ class DBWallerConan(ConanFile):
         "with_benchmarks": [True, False],
         "build_apps": [True, False],
         "with_daemon": [True, False],
+        "with_remote_tests": [True, False],
     }
     default_options = {
         "shared": False,
@@ -30,6 +31,7 @@ class DBWallerConan(ConanFile):
         "with_benchmarks": False,
         "build_apps": False,
         "with_daemon": False,
+        "with_remote_tests": False,
         "spdlog/*:header_only": False,
         "grpc/*:csharp_plugin": False,
         "grpc/*:node_plugin": False,
@@ -49,6 +51,8 @@ class DBWallerConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, "20")
+        if self.options.with_remote_tests and not (self.options.with_daemon and self.options.with_tests):
+            raise ConanInvalidConfiguration("Remote integration tests require with_daemon=True and with_tests=True")
         if self.options.with_daemon and str(self.settings.os) not in ("Linux", "Macos"):
             raise ConanInvalidConfiguration("The daemon currently supports Linux and macOS")
         if self.options.with_daemon and cross_building(self):
@@ -70,12 +74,14 @@ class DBWallerConan(ConanFile):
         for filename in files_to_copy:
             copy(self, filename, self.recipe_folder, self.export_sources_folder)
 
-        for directory in ("apps", "benchmarks", "cmake", "docs", "include", "proto", "scripts", "src", "tests"):
+        for directory in ("apps", "benchmarks", "cmake", "docs", "examples", "include", "proto", "scripts", "sdk", "src", "tests"):
             copy(
                 self,
                 "*",
                 os.path.join(self.recipe_folder, directory),
                 os.path.join(self.export_sources_folder, directory),
+                excludes=("build/*", "*/build/*", "__pycache__/*", "*/__pycache__/*",
+                          "*.pyc", "*CMakeUserPresets.json"),
             )
 
     def requirements(self):
@@ -95,6 +101,7 @@ class DBWallerConan(ConanFile):
         self.info.options.rm_safe("with_tests")
         self.info.options.rm_safe("with_benchmarks")
         self.info.options.rm_safe("build_apps")
+        self.info.options.rm_safe("with_remote_tests")
 
     def layout(self):
         cmake_layout(self)
@@ -111,6 +118,7 @@ class DBWallerConan(ConanFile):
         toolchain.variables["DBWALLER_BUILD_TESTS"] = bool(self.options.with_tests)
         toolchain.variables["DBWALLER_BUILD_BENCHMARKS"] = bool(self.options.with_benchmarks)
         toolchain.variables["DBWALLER_BUILD_DAEMON"] = bool(self.options.with_daemon)
+        toolchain.variables["DBWALLER_BUILD_REMOTE"] = bool(self.options.with_remote_tests)
         if self.options.with_daemon:
             # ConanCenter's imported executable targets otherwise search PATH,
             # which can pick up a system generator incompatible with this graph.

@@ -1,7 +1,8 @@
 # DBWaller daemon bridge implementation plan
 
-Status: PR 1 foundation and PR 2 daemon implemented locally, 2026-11-11;
-client packaging and later stages remain planned.
+Status: PR 1 foundation and PR 2 daemon merged; PR 3 public C++ client, packaging,
+and generic mode example implemented locally, 2026-11-12. Deployment and later
+stages remain planned. See [C++ remote client](remote-cpp.md) for source installation.
 C++ is the first remote client;
 Python and Node.js follow after the protocol and C++ integration are stable.
 This document describes the roadmap. The implemented protocol/service boundary
@@ -72,13 +73,13 @@ data; it must not become the only copy of a post, message, account, or transacti
 
 ## Public distribution and developer experience
 
-The target/package names below are proposed interfaces, not currently published
-packages or installation commands.
+The embedded engine, daemon, and C++ SDK have source installation routes. Public
+registry/image publication and the deployment deliverables below remain planned.
 
 | Deliverable | Installation and dependency boundary |
 | --- | --- |
 | Embedded engine | Preserve the existing Conan/CMake library and `DBWaller::dbwaller` target; no networking dependency required. |
-| Remote C++ SDK | Provide a versioned Conan 2 package and relocatable CMake package, with proposed `DBWallerRemote::client` target. A remote-only application does not link the engine or daemon and need not handle generated gRPC stubs directly. |
+| Remote C++ SDK | Separate `sdk/cpp` Conan 2 recipe and relocatable CMake package with `DBWallerRemote::client`. A remote-only application does not link the engine or daemon and need not handle generated gRPC stubs directly. |
 | Daemon | Publish versioned source releases, a documented Linux build, and a public container image with runnable sample configuration. Keep localhost development and non-Google deployment supported. |
 | Google Cloud deployment kit | Provide a documented `deploy/gcp/` installer and reusable Terraform configuration that deploy into the user's own project, with private connectivity, configuration outputs, upgrade, and removal workflows. |
 | Python and Node.js SDKs | Later publish installable packages through PyPI and npm, sharing protocol conformance fixtures and documented client/server compatibility. |
@@ -86,7 +87,7 @@ packages or installation commands.
 The intended CMake consumer experience is:
 
 ```cmake
-# Planned usage after the remote SDK has been implemented and packaged.
+# Available after installing the source package from sdk/cpp.
 find_package(DBWallerRemote CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE DBWallerRemote::client)
 ```

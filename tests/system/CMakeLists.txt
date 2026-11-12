@@ -36,4 +36,19 @@ if(DBWALLER_BUILD_DAEMON)
     add_test(NAME daemon_process COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/daemon/process_tests.py"
         process "${fixture_dir}" "$<TARGET_FILE:dbwallerd>" "$<TARGET_FILE:dbwaller_daemon_probe>")
     set_tests_properties(daemon_process PROPERTIES FIXTURES_REQUIRED daemon_tls LABELS "system;daemon" TIMEOUT 90)
+    if(DBWALLER_BUILD_REMOTE)
+        add_executable(dbwaller_remote_tests remote/client_tests.cpp)
+        target_link_libraries(dbwaller_remote_tests PRIVATE DBWallerRemote::client dbwaller_rpc Catch2::Catch2WithMain)
+        target_compile_definitions(dbwaller_remote_tests PRIVATE DBWALLER_EXAMPLE_EMBEDDED)
+        add_test(NAME remote_client COMMAND dbwaller_remote_tests --reporter compact)
+        set_tests_properties(remote_client PROPERTIES FIXTURES_REQUIRED daemon_tls LABELS "system;remote;concurrency"
+            ENVIRONMENT "DBWALLER_TEST_DIR=${fixture_dir}" TIMEOUT 90)
+        add_executable(dbwaller_remote_probe remote/probe.cpp)
+        target_link_libraries(dbwaller_remote_probe PRIVATE DBWallerRemote::client)
+        add_test(NAME remote_process COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/daemon/process_tests.py"
+            process "${fixture_dir}" "$<TARGET_FILE:dbwallerd>" "$<TARGET_FILE:dbwaller_remote_probe>")
+        set_tests_properties(remote_process PROPERTIES FIXTURES_REQUIRED daemon_tls LABELS "system;remote" TIMEOUT 90
+            RESOURCE_LOCK daemon_process_fixture)
+        set_tests_properties(daemon_process PROPERTIES RESOURCE_LOCK daemon_process_fixture)
+    endif()
 endif()

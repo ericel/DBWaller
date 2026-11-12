@@ -33,6 +33,12 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Added
 
+- Separately installable C++20 `dbwaller-remote` client and
+  `DBWallerRemote::client` CMake target: async requests, bounded admission,
+  deadlines/cancellation, owned completion state, application executor dispatch,
+  TLS, opaque tickets, and conservative mutation errors without automatic retries.
+  Add generic disabled/embedded/remote examples, real-socket lifecycle tests,
+  separate-process tests, and installed-package CI with backend outage fallback.
 - Optional `dbwallerd` gRPC daemon with TLS, namespace/operation authorization,
   bounded RPC admission and transport resources, graceful signal shutdown,
   aggregate diagnostics, and local TLS configuration tooling. Add actual socket
@@ -44,7 +50,7 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
   with namespace-scoped binary keys/tags, bounded instance/owner-bound single-use
   tickets, monotonic expiry, conditional publication, and cold restart semantics.
   Embedded builds acquire no networking dependency. Add shared conformance
-  scenarios and service tests. Public remote SDK and persistence remain planned.
+  scenarios and service tests. Persistence remains planned.
 - Public `get_snapshot()` and `get_snapshot_and_begin_load()` helpers: relative
   freshness metadata and a snapshot/ticket pair atomic with respect to invalidation.
 - Public `begin_load()` / `put_if_current()` API with opaque, engine-bound
