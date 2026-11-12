@@ -3,6 +3,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <openssl/ssl.h>
 
 namespace {
 std::string read(const std::filesystem::path& path) {
@@ -14,6 +15,7 @@ std::string read(const std::filesystem::path& path) {
 int main(int argc, char** argv) {
     if (argc != 5) return 2;
     try {
+        if (OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, nullptr) != 1) return 1;
         grpc::SslCredentialsOptions ssl; ssl.pem_root_certs = read(argv[2]);
         const auto token = read(argv[3]);
         auto client = dbwaller::v1::Cache::NewStub(grpc::CreateChannel(argv[1], grpc::SslCredentials(ssl)));

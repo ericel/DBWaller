@@ -19,6 +19,15 @@ namespace dbwaller::remote {
 using Clock = std::chrono::steady_clock;
 using Milliseconds = std::chrono::milliseconds;
 
+// Application-owned process policy: call at startup before ANY OpenSSL use or
+// worker creation. Prevents automatic global crypto cleanup racing gRPC workers
+// at process exit. Repeated calls are safe, but cannot undo earlier OpenSSL init.
+// Global crypto allocations live until OS process reclamation; do not manually
+// call OPENSSL_cleanup() or unload OpenSSL while gRPC can still use it.
+// Call explicitly: Client does not call this helper before gRPC initialization.
+// Throws std::runtime_error if OpenSSL initialization fails.
+void initialize_process_tls();
+
 enum class ErrorCode {
     InvalidArgument, Unauthenticated, PermissionDenied, ResourceExhausted,
     Unavailable, DeadlineExceeded, Cancelled, ClientClosed, ProtocolError, Internal

@@ -33,6 +33,7 @@ template<class Store> int demo(Store& store, bool disabled) {
 }
 int main(int argc, char** argv) {
     try {
+        example::r::initialize_process_tls();
         std::map<std::string, std::string> args;
         for (int i = 1; i < argc; ++i) {
             std::string name = argv[i];

@@ -1,12 +1,20 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/generic/callback_generic_service.h>
 #include <openssl/sha.h>
+#include <openssl/ssl.h>
+#include <cstring>
 #include <fstream>
 #include <iterator>
 #include <chrono>
 std::string read(const char* path) { std::ifstream in(path); return {std::istreambuf_iterator<char>(in), {}}; }
 int main(int argc, char** argv) {
-    if (argc != 3) return 2;
+    if (argc != 3 && argc != 4) return 2;
+    if (argc == 4) {
+        if (std::strcmp(argv[3], "--process-lifetime-tls") != 0) return 2;
+        // Same explicit application startup policy as the SDK helper. Keeping
+        // this optional preserves the original dependency-only reproducer.
+        if (OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, nullptr) != 1) return 3;
+    }
     unsigned char digest[SHA256_DIGEST_LENGTH]; SHA256(reinterpret_cast<const unsigned char*>("probe"), 5, digest);
     for (int i = 0; i != 10; ++i) {
         grpc::CallbackGenericService service;

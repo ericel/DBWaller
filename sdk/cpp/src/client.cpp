@@ -2,6 +2,7 @@
 #include "dbwaller/v1/cache.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
+#include <openssl/ssl.h>
 #include <charconv>
 #include <limits>
 #include <string_view>
@@ -9,6 +10,10 @@
 #include <unordered_map>
 
 namespace dbwaller::remote {
+void initialize_process_tls() {
+    if (OPENSSL_init_ssl(OPENSSL_INIT_NO_ATEXIT, nullptr) != 1)
+        throw std::runtime_error("TLS process initialization failed");
+}
 namespace detail {
 struct Access {
     struct Scope { std::string cache_namespace, endpoint; };

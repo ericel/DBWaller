@@ -50,6 +50,7 @@ class DBWallerRemoteConan(ConanFile):
 
     def requirements(self):
         self.requires("grpc/1.84.0")
+        self.requires("openssl/3.5.6")
 
     def layout(self):
         cmake_layout(self)
