@@ -101,6 +101,19 @@ def main():
                 raise RuntimeError("disabled mode did not bypass cache")
         except Exception:
             print(run(compose + ["logs", "--no-color", "--tail=50", "daemon"], env=env), file=sys.stderr)
+            # Resolver traces contain addresses, not RPC metadata or credentials.
+            # Keep this diagnostic bounded and preserve the original failure.
+            for diagnostic in [
+                compose + ["run", "--rm", "--no-deps", "--entrypoint", "getent", "client", "hosts", "daemon"],
+                compose + ["run", "--rm", "--no-deps", "--env", "GRPC_TRACE=cares_resolver,event_engine_dns",
+                           "--entrypoint", "/usr/local/bin/dbwaller-probe", "client", "read", "daemon:7447",
+                           "/etc/dbwaller-client/server.crt", "/etc/dbwaller-client/client.token", "public"],
+            ]:
+                try:
+                    result = subprocess.run(diagnostic, env=env, text=True, capture_output=True, timeout=15)
+                    print(result.stdout + result.stderr, file=sys.stderr)
+                except subprocess.TimeoutExpired:
+                    print("Container connectivity diagnostic timed out", file=sys.stderr)
             raise
         finally:
             run(compose + ["down", "--remove-orphans", "--timeout", "15"], env=env)
