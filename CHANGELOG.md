@@ -37,6 +37,11 @@ The format is based on Keep a Changelog, and DBWaller follows Semantic Versionin
 
 ### Added
 
+- Standalone Linux daemon/client container targets, pinned base/Conan inputs,
+  dependency notices, and a non-root TLS Compose quickstart with bounded resources.
+  Add packaged deployment tests for sharing, authorization, invalidation, clean
+  shutdown, cold restart, and outage fallback. Release automation promotes the
+  tested amd64 image with archive checksums and registry digest metadata.
 - Separately installable C++20 `dbwaller-remote` client and
   `DBWallerRemote::client` CMake target: async requests, bounded admission,
   deadlines/cancellation, owned completion state, application executor dispatch,

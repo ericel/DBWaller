@@ -1,0 +1,55 @@
+services:
+  daemon:
+    image: ${DBWALLER_IMAGE:-dbwaller-daemon:local}
+    user: "${DBWALLER_UID:-65532}:${DBWALLER_GID:-65532}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    restart: unless-stopped
+    stop_grace_period: 15s
+    ports:
+      - "127.0.0.1:${DBWALLER_PORT:-7447}:7447"
+    volumes:
+      - type: bind
+        source: ${DBWALLER_LOCAL_DIR:?Run init_local.py first}/server
+        target: /etc/dbwaller
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test: [CMD, /usr/local/bin/dbwaller-probe, health, "127.0.0.1:7447", /etc/dbwaller/server.crt, /etc/dbwaller/health.token, public]
+      interval: 5s
+      timeout: 4s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  client:
+    image: ${DBWALLER_CLIENT_IMAGE:-dbwaller-client:local}
+    profiles: [tools]
+    user: "${DBWALLER_UID:-65532}:${DBWALLER_GID:-65532}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 64
+    volumes:
+      - type: bind
+        source: ${DBWALLER_LOCAL_DIR:?Run init_local.py first}/client
+        target: /etc/dbwaller-client
+        read_only: true
+        bind:
+          create_host_path: false
+    command: [--mode, remote, --endpoint, "daemon:7447", --namespace, public, --ca, /etc/dbwaller-client/server.crt, --token-file, /etc/dbwaller-client/client.token]
+networks:
+  default:
+    internal: true
+

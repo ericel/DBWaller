@@ -1,0 +1,23 @@
+{
+  "version": "0.5",
+  "requires": [
+    "abseil/20250127.0#7f3643d6f847196fe0bdc2b83c109831",
+    "c-ares/1.25.0#b4637401391147b6ee5d8d17ee643fb7",
+    "grpc/1.84.0#c7c2ff9ed88b66eac8b8399c96d8df2c",
+    "openssl/3.5.6#13f8f30151479797ca8a7c014856f849",
+    "protobuf/6.30.1#97bae23ef6d7f9fcfdb4ded9468ad6de",
+    "re2/20251105#b28122b338495c46df553226227298aa",
+    "zlib/1.3.1#b8bc2603263cf7eccbd6e17e66b0ed76",
+    "fmt/11.2.0#579bb2cdf4a7607621beea4eb4651e0f",
+    "nlohmann_json/3.12.0#2d634ab0ec8d9f56353e5ccef6d6612c",
+    "spdlog/1.15.3#855569172102c04e3e0db21ae95cf017"
+  ],
+  "build_requires": [
+    "abseil/20250127.0#7f3643d6f847196fe0bdc2b83c109831",
+    "cmake/3.31.6#ed0e6c1d49bd564ce6fed1a19653b86d",
+    "protobuf/6.30.1#97bae23ef6d7f9fcfdb4ded9468ad6de",
+    "zlib/1.3.1#b8bc2603263cf7eccbd6e17e66b0ed76"
+  ],
+  "python_requires": [],
+  "config_requires": []
+}

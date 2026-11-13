@@ -24,6 +24,14 @@ This document defines the tracked path for continuous integration, versioning, a
   - Builds with the tracked Conan-aware CMake presets.
   - Runs Tier A checks via `ctest --preset tier-a-pr`.
   - Runs `conan create .` to verify the install/export boundary and `test_package/`.
+  - Calls the reusable container workflow to build and smoke-test the actual
+    daemon and standalone client images.
+- `.github/workflows/container.yml`
+  - Builds native Linux amd64 images from pinned base/Conan inputs.
+  - Tests TLS, authorization, resource restrictions, sharing, invalidation,
+    graceful stop, cold restart, and cache-outage fallback through Compose.
+  - On release calls, exports the tested image, dependency notices, and checksums
+    as a workflow artifact for the gated publish job; PR builds do not publish.
 - `.github/workflows/release.yml`
   - Runs on `v*.*.*` tags.
   - Verifies the pushed tag matches `VERSION`.
@@ -31,6 +39,8 @@ This document defines the tracked path for continuous integration, versioning, a
   - Waits on the `release` GitHub environment before publishing.
   - Re-creates the Conan package in the gated publish job.
   - Optionally uploads to Artifactory when the Artifactory variables and secrets are present.
+  - Loads the tested container artifact and publishes its versioned GHCR tag,
+    retaining archive checksums and registry digest metadata in release assets.
   - Creates a GitHub release after the gated publish job completes.
 - `.github/workflows/nightly.yml`
   - Runs on a schedule and by manual dispatch.
@@ -42,6 +52,8 @@ This document defines the tracked path for continuous integration, versioning, a
 - Protect `main`.
 - Require pull requests before merge.
 - Require the `verify` status check before merge.
+- Also require daemon and container verification before merging changes to their
+  packaging or runtime; select the displayed check names after their first runs.
 - Block force pushes to `main`.
 - Add a `release` environment with required reviewer `ericel` and `prevent_self_review=false`.
 - Add a tag ruleset for `v*` that blocks tag updates and deletions.
@@ -92,6 +104,14 @@ To cut a release:
 3. Push the release tag `v<version>`.
 4. Approve the `release` environment when GitHub prompts after validation succeeds.
 5. Let `release.yml` publish the package and create the GitHub release.
+6. On the first container release, set the GHCR package visibility to public and
+   verify an anonymous digest pull before advertising that installation route.
+   The GitHub image archive is also installable without registry authentication.
+
+The container workflow uses `packages: write` only in the gated publish job.
+Neither merging a PR nor running container validation publishes a release.
+See [Container operation and upgrades](container.md) for loading archives and
+using pinned image digests. Do not move existing release tags to publish changes.
 
 ## Staged Path Forward
 

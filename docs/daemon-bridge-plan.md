@@ -1,8 +1,9 @@
 # DBWaller daemon bridge implementation plan
 
-Status: PR 1 foundation and PR 2 daemon merged; PR 3 public C++ client, packaging,
-and generic mode example implemented locally, 2026-11-12. Deployment and later
-stages remain planned. See [C++ remote client](remote-cpp.md) for source installation.
+Status: foundation, daemon, public C++ client, and TLS startup mitigation merged.
+Standalone container packaging and release validation are implemented locally,
+2026-11-13; registry publication and cloud deployment remain pending. See
+[Container quickstart](container.md) and [C++ remote client](remote-cpp.md).
 C++ is the first remote client;
 Python and Node.js follow after the protocol and C++ integration are stable.
 This document describes the roadmap. The implemented protocol/service boundary
@@ -73,8 +74,9 @@ data; it must not become the only copy of a post, message, account, or transacti
 
 ## Public distribution and developer experience
 
-The embedded engine, daemon, and C++ SDK have source installation routes. Public
-registry/image publication and the deployment deliverables below remain planned.
+The embedded engine, daemon, and C++ SDK have source installation routes. The
+container source build, quickstart, and release workflow are available; actual
+registry publication and Google Cloud installation remain pending.
 
 | Deliverable | Installation and dependency boundary |
 | --- | --- |
