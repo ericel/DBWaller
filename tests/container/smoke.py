@@ -11,10 +11,12 @@ import uuid
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run(command, *, env=None, success=True, timeout=120):
+def run(command, *, env=None, success=True, timeout=120, expected_error=None):
     result = subprocess.run(command, env=env, text=True, capture_output=True, timeout=timeout)
     if (result.returncode == 0) != success:
         raise RuntimeError(f"Unexpected exit {result.returncode}: {' '.join(command)}\n{result.stdout}\n{result.stderr}")
+    if expected_error is not None and f"SDK error code {expected_error}\n" not in result.stderr:
+        raise RuntimeError(f"Unexpected SDK error: {result.stderr}")
     return result.stdout
 
 
@@ -44,9 +46,10 @@ def main():
         client = compose + ["run", "--rm", "--no-deps", "client"]
         probe = compose + ["run", "--rm", "--no-deps", "--entrypoint", "/usr/local/bin/dbwaller-probe", "client"]
 
-        def check(mode, success=True):
+        def check(mode, success=True, expected_error=None):
             return run(probe + [mode, "daemon:7447", "/etc/dbwaller-client/server.crt",
-                                "/etc/dbwaller-client/client.token", "public"], env=env, success=success)
+                                "/etc/dbwaller-client/client.token", "public"], env=env,
+                       success=success, expected_error=expected_error)
 
         try:
             run(compose + ["up", "-d", "--wait", "--wait-timeout", "90", "daemon"], env=env)
@@ -65,21 +68,22 @@ def main():
             online = run(client, env=env)
             if "backend fetches: 1" not in online or "Updated value read successfully" not in online:
                 raise RuntimeError("packaged SDK did not share and invalidate cache values:\n" + online)
-            check("health", success=False)  # Ordinary client credentials are not admin credentials.
+            check("health", success=False, expected_error=2)  # PermissionDenied: not an admin.
             token_path = config / "client/client.token"
             token = token_path.read_text()
             try:
                 token_path.write_text("0" * 64)
-                check("read", success=False)
+                check("read", success=False, expected_error=1)  # Unauthenticated.
             finally:
                 token_path.write_text(token)
             ca_path = config / "client/server.crt"
             ca = ca_path.read_text()
             try:
                 ca_path.write_text("")  # System trust must not accept the private development CA.
-                check("read", success=False)
+                check("read", success=False, expected_error=4)  # Unavailable: TLS trust failed.
             finally:
                 ca_path.write_text(ca)
+            check("read")  # Rejections did not stop the daemon or corrupt the cached value.
             run(compose + ["stop", "daemon"], env=env)
             stopped = json.loads(run(["docker", "inspect", container]))[0]
             if stopped["State"]["ExitCode"] != 0 or stopped["State"]["OOMKilled"]:

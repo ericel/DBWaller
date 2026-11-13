@@ -17,6 +17,8 @@ concurrency:
 jobs:
   container:
     uses: ./.github/workflows/container.yml
+    with:
+      export_image: true
 
   verify-daemon:
     runs-on: ubuntu-latest

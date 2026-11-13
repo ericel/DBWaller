@@ -41,6 +41,9 @@ services:
     security_opt: [no-new-privileges:true]
     mem_limit: 256m
     pids_limit: 64
+    # Resolve Compose service names without inheriting the host's search domains.
+    # An isolated network cannot forward those suffix queries to upstream DNS.
+    dns_search: ["."]
     volumes:
       - type: bind
         source: ${DBWALLER_LOCAL_DIR:?Run init_local.py first}/client

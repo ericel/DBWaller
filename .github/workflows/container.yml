@@ -7,6 +7,11 @@ on:
         type: boolean
         default: false
   workflow_dispatch:
+    inputs:
+      export_image:
+        description: Export and verify the tested release archive without publishing
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -62,6 +67,12 @@ jobs:
           docker run --rm --entrypoint tar dbwaller-daemon:ci -C /usr/local/share -czf - dbwaller > "dist/dbwaller-daemon-${VERSION}-notices.tar.gz"
           cd dist
           sha256sum ./*.tar.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          expected=$(docker image inspect "dbwaller-daemon:${VERSION}-linux-amd64" --format '{{.Id}}')
+          docker load --input "dbwaller-daemon-${VERSION}-linux-amd64.tar.gz"
+          actual=$(docker image inspect "dbwaller-daemon:${VERSION}-linux-amd64" --format '{{.Id}}')
+          test "$actual" = "$expected"
+          tar -tzf "dbwaller-daemon-${VERSION}-notices.tar.gz" > /dev/null
       - uses: actions/upload-artifact@v4
         if: ${{ inputs.export_image }}
         with:

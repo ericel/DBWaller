@@ -54,6 +54,8 @@ The daemon listens on `0.0.0.0:7447` inside its container. Compose publishes onl
 **`127.0.0.1:7447` on the host** and uses an isolated network without external
 egress. Set `DBWALLER_PORT` if that host port is occupied. The host C++ example
 can use `127.0.0.1:7447`, namespace `public`, and files under `.local/container/client/`.
+The companion client disables inherited DNS search suffixes so Compose's `daemon`
+name resolves locally, including on hosts whose search domains need external DNS.
 
 ## Runtime limits and health
 
@@ -158,7 +160,8 @@ actual runtime restrictions, TLS authorization, separate-client sharing,
 invalidation, SIGTERM, cold restart, outage fallback, disabled mode, and failure
 on missing configuration. It removes only its own containers/network. Subprocess
 watchdogs bound failures without tight latency assertions. CI uses the same test
-on Linux amd64.
+on Linux amd64, then exports, checksums, and reloads the release archive without
+publishing it. Registry publication occurs only in the release workflow.
 
 Google Cloud installation, snapshots, replication, and Python/Node.js clients
 remain later work in the [bridge plan](daemon-bridge-plan.md).
