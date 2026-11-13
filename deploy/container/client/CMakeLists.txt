@@ -7,4 +7,3 @@ foreach(target dbwaller_remote_example dbwaller-probe)
     target_compile_features(${target} PRIVATE cxx_std_20)
     target_link_libraries(${target} PRIVATE DBWallerRemote::client)
 endforeach()
-

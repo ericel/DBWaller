@@ -44,4 +44,3 @@ for node in nodes:
     shutil.copytree(licenses, share / "licenses" / name)
     manifest.append({key: node.get(key) for key in ("ref", "package_id", "prev", "settings", "options")})
 (share / "dependencies.json").write_text(json.dumps(manifest, indent=2) + "\n")
-
