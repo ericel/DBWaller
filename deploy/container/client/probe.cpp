@@ -4,6 +4,11 @@
 
 namespace r = dbwaller::remote;
 namespace {
+template<class T> bool succeeded(const r::Result<T>& result, const char* operation) {
+    if (result) return true;
+    std::cerr << operation << " failed with SDK error code " << static_cast<int>(result.error().code) << '\n';
+    return false;
+}
 std::string file(const char* path, size_t limit) {
     std::ifstream input(path, std::ios::binary);
     if (!input) throw std::runtime_error("unreadable file");
@@ -31,15 +36,15 @@ int main(int argc, char** argv) {
         const std::string mode = argv[1];
         if (mode == "health") {
             const auto result = client.health().get();
-            if (!result || !result.value().ready) return 1;
+            if (!succeeded(result, "health") || !result.value().ready) return 1;
         } else if (mode == "seed") {
             const auto load = client.begin_load("container-restart-probe").get();
-            if (!load) return 1;
+            if (!succeeded(load, "begin_load")) return 1;
             const auto stored = client.publish(load.value().ticket, "ephemeral", {std::chrono::minutes(5), {}, {}}).get();
-            if (!stored || stored.value() != r::PublishStatus::Stored) return 1;
+            if (!succeeded(stored, "publish") || stored.value() != r::PublishStatus::Stored) return 1;
         } else if (mode == "read" || mode == "cold") {
             const auto result = client.lookup("container-restart-probe").get();
-            if (!result) return 1;
+            if (!succeeded(result, "lookup")) return 1;
             if (mode == "read" && (result.value().kind != r::LookupKind::Fresh || result.value().value != "ephemeral")) return 1;
             if (mode == "cold" && result.value().kind != r::LookupKind::Miss) return 1;
         } else return 2;

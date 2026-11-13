@@ -60,11 +60,11 @@ def main():
                 raise RuntimeError("container isolation/resource limits are missing")
             if any(binding["HostIp"] != "127.0.0.1" for bindings in host["PortBindings"].values() for binding in bindings):
                 raise RuntimeError("quickstart port is not bound to localhost")
-            online = run(client, env=env)
-            if "backend fetches: 1" not in online or "Updated value read successfully" not in online:
-                raise RuntimeError("packaged SDK did not share and invalidate cache values")
             check("seed")
             check("read")  # Separate client process observes the previous publication.
+            online = run(client, env=env)
+            if "backend fetches: 1" not in online or "Updated value read successfully" not in online:
+                raise RuntimeError("packaged SDK did not share and invalidate cache values:\n" + online)
             check("health", success=False)  # Ordinary client credentials are not admin credentials.
             token_path = config / "client/client.token"
             token = token_path.read_text()
@@ -99,6 +99,9 @@ def main():
             disabled = run(client + ["--mode", "disabled"], env=env)
             if "backend fetches: 2" not in disabled:
                 raise RuntimeError("disabled mode did not bypass cache")
+        except Exception:
+            print(run(compose + ["logs", "--no-color", "--tail=50", "daemon"], env=env), file=sys.stderr)
+            raise
         finally:
             run(compose + ["down", "--remove-orphans", "--timeout", "15"], env=env)
     print("Container smoke passed: non-root/read-only/limits, TLS, auth, sharing, invalidation, SIGTERM, cold restart, outage fallback, disabled mode")
