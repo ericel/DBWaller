@@ -8,6 +8,9 @@ example are available from source. There is no Redis/RESP compatibility,
 persistence, replication, or Google Cloud installer yet. Applications keep their durable data
 and perform backend fetches themselves.
 
+For the packaged deployment, use the [container quickstart](container.md), which
+includes a separate C++ example, TLS configuration, limits, and lifecycle checks.
+
 The daemon selects OpenSSL's process-lifetime cleanup policy before configuration
 validation or worker creation. This prevents global crypto cleanup racing gRPC
 worker teardown at process exit. OpenSSL global allocations are reclaimed with

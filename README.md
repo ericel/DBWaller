@@ -38,6 +38,11 @@ example demonstrates disabled, embedded, and remote modes with backend fallback.
 Remote applications must follow the documented explicit TLS startup policy before
 other OpenSSL use; the supplied daemon and examples apply it at process startup.
 
+The [standalone container quickstart](docs/container.md) builds a non-root daemon
+and an installed C++ client example with TLS, bounded resources, cold restart,
+and backend fallback. Release automation tests the packaged deployment before
+exporting its image archive and publishing a versioned image.
+
 ## Project Structure
 
 - `include/dbwaller/` — public headers (core, concurrency, policy, crypto, adapters)

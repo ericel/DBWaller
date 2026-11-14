@@ -1,0 +1,29 @@
+# Only public source inputs enter the build context. Local credentials, caches,
+# VCS data, and unrelated working files are excluded by default.
+**
+!VERSION
+!LICENSE
+!README.md
+!CMakeLists.txt
+!CMakePresets.json
+!conanfile.py
+!policy.json
+!apps/**
+!cmake/**
+!docs/**
+!examples/**
+!include/**
+!proto/**
+!scripts/**
+!sdk/**
+!src/**
+!tests/**
+!deploy/container/**
+**/build/**
+**/__pycache__/**
+**/*.pyc
+**/CMakeUserPresets.json
+**/.env*
+**/*.key
+**/*.token
+**/*.pem

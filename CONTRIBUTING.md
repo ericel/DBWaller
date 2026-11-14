@@ -50,6 +50,13 @@ Socket-test executables follow the documented TLS startup policy. The
 `remote_tls_policy` subprocess regression retains baseline and too-late cases;
 do not remove those checks or suppress TSan reports to make a run pass.
 
+For container packaging or workflow changes, build both Dockerfile targets
+(`daemon` with `VERSION` set, and `client`), then run
+`python3 tests/container/smoke.py`. The reusable workflow repeats this on Linux
+amd64 and exports the tested image for release promotion. See
+[Container packaging](docs/container.md) for commands and dependency refresh
+policy. Keep credentials outside the Docker build context.
+
 If you touch public headers, dependency wiring, install rules, or packaging, run:
 
 ```bash

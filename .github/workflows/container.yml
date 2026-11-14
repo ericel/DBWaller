@@ -1,0 +1,82 @@
+name: container
+
+on:
+  workflow_call:
+    inputs:
+      export_image:
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      export_image:
+        description: Export and verify the tested release archive without publishing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Read release version
+        id: version
+        shell: bash
+        run: |
+          version=$(tr -d '[:space:]' < VERSION)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+      - name: Build daemon image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/container/Dockerfile
+          target: daemon
+          platforms: linux/amd64
+          load: true
+          tags: dbwaller-daemon:ci
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+            REVISION=${{ github.sha }}
+          cache-from: type=gha,scope=dbwaller-container-amd64
+          cache-to: type=gha,mode=max,scope=dbwaller-container-amd64
+      - name: Build standalone client image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/container/Dockerfile
+          target: client
+          platforms: linux/amd64
+          load: true
+          tags: dbwaller-client:ci
+          cache-from: type=gha,scope=dbwaller-container-amd64
+      - name: Test the packaged deployment
+        run: python3 tests/container/smoke.py --image dbwaller-daemon:ci --client-image dbwaller-client:ci
+      - name: Export the tested image and notices
+        if: ${{ inputs.export_image }}
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p dist
+          docker tag dbwaller-daemon:ci "dbwaller-daemon:${VERSION}-linux-amd64"
+          docker save "dbwaller-daemon:${VERSION}-linux-amd64" | gzip > "dist/dbwaller-daemon-${VERSION}-linux-amd64.tar.gz"
+          docker run --rm --entrypoint tar dbwaller-daemon:ci -C /usr/local/share -czf - dbwaller > "dist/dbwaller-daemon-${VERSION}-notices.tar.gz"
+          cd dist
+          sha256sum ./*.tar.gz > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          expected=$(docker image inspect "dbwaller-daemon:${VERSION}-linux-amd64" --format '{{.Id}}')
+          docker load --input "dbwaller-daemon-${VERSION}-linux-amd64.tar.gz"
+          actual=$(docker image inspect "dbwaller-daemon:${VERSION}-linux-amd64" --format '{{.Id}}')
+          test "$actual" = "$expected"
+          tar -tzf "dbwaller-daemon-${VERSION}-notices.tar.gz" > /dev/null
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.export_image }}
+        with:
+          name: daemon-container-release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
